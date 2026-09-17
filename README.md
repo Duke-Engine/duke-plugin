@@ -5,11 +5,27 @@
 
 ## Overview
 
-This repository implements an IntelliJ Platform plugin.
+An IntelliJ Platform plugin that lets the IDE read Duke Engine's INI files (`Object Rogue` … `End`,
+`Update = MoveUpdate Tag` … `End`, `DungeonSkill Rogue Q` …). It stands alone: it knows the INI
+format only, not the engine's Java code.
 
-## Demo Functionality
+## Features
 
-The sample plugin adds a `My Tool Window` tool window with a simple functionality of shuffling a random number.
+Every `*.ini` file opens as **Duke INI** and gets:
+
+- **Highlighting** for block types, `End`, keys, module names, values, numbers, strings and `;` comments.
+- **Folding** of each block and each module sub-block down to its first line.
+- **Structure view** (Alt+7) listing every block, with an `Object`'s modules under it.
+- **Checks:**
+  - error on a block with no `End`, and on an `End` with no open block;
+  - warning on a line that is neither a header nor `Key = value`, and on a key set twice in one block.
+    Keys written as lists (`Kind` twice in a row) or as repeating groups (`Holds` / `HeldIn` per held
+    item) are not counted.
+- **Navigation:** Ctrl+Click a name used elsewhere to reach its definition, e.g. `Rogue` in `DungeonSkill Rogue Q`
+  or `HeavyArrow` in `Projectile = HeavyArrow`. Ctrl+Click a block's own name to list its usages.
+
+Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests:
+`./gradlew test`. They also check that every file in `dungeon/src/main/resources/ini` loads with no problems.
 
 ## Plugin structure
 

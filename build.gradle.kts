@@ -6,6 +6,11 @@ plugins {
     id("org.jetbrains.intellij.platform")
 }
 
+// The 2025.3 platform runs on Java 21; building with a newer JAVA_HOME would emit classes it cannot load.
+kotlin {
+    jvmToolchain(21)
+}
+
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     testImplementation(libs.junit)

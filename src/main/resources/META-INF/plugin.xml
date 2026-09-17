@@ -1,36 +1,35 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
-    <id>uz.sonic.duke-plugin</id>
-
-    <!-- Public plugin name should be written in Title Case.
-     Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
+    <id>uz.duke.plugin</id>
     <name>Duke Engine</name>
-
-    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
     <vendor url="https://www.sonic.uz">Sonic development team</vendor>
 
-    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
-         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Tooling for Duke Engine — a deterministic Java RTS engine. <br>
-        <p>
-            Content completion for INI definitions, asset path checks, and
-            inspections that catch determinism violations before they become desyncs.
-        </p>
+        Editor support for the INI files that define content for Duke Engine, a deterministic Java RTS engine.
+        <ul>
+            <li>Highlighting for block headers, <code>End</code>, keys, values, numbers, strings and <code>;</code> comments</li>
+            <li>Folding for <code>Object ... End</code> blocks and their module sub-blocks</li>
+            <li>Structure view listing every block and the modules inside each <code>Object</code></li>
+            <li>Checks for unclosed blocks, stray <code>End</code> lines, unrecognized lines and keys set twice in one block</li>
+            <li>Ctrl+Click from a block name used elsewhere, such as the hero a <code>DungeonSkill</code> belongs to, to its definition</li>
+        </ul>
+        The plugin reads only the INI text. It does not check block types, fields or module names against the engine code.
         ]]></description>
 
-    <!-- Product and plugin compatibility requirements.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
 
-    <resource-bundle>messages.MyMessageBundle</resource-bundle>
+    <resource-bundle>messages.DukeBundle</resource-bundle>
 
-    <!-- Extensions defined by the plugin.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="MyToolWindow" factoryClass="uz.sonic.MyToolWindowFactory"
-                    icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+        <fileType name="Duke INI" language="DukeIni" extensions="ini"
+                  implementationClass="uz.duke.plugin.ini.DukeIniFileType" fieldName="INSTANCE"/>
+        <lang.parserDefinition language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="DukeIni"
+                                       implementationClass="uz.duke.plugin.ini.DukeIniSyntaxHighlighterFactory"/>
+        <lang.foldingBuilder language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFoldingBuilder"/>
+        <lang.psiStructureViewFactory language="DukeIni"
+                                      implementationClass="uz.duke.plugin.ini.DukeIniStructureViewFactory"/>
+        <lang.findUsagesProvider language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFindUsagesProvider"/>
+        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniAnnotator"/>
     </extensions>
-
 </idea-plugin>
