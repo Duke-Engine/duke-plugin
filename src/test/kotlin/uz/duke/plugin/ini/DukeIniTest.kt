@@ -24,18 +24,35 @@ class DukeIniTest : BasePlatformTestCase() {
             "broken.ini",
             """
             |<warning descr="Unrecognized line: expected a block header such as 'Object Name'">Speed = 5</warning>
-            |Object Hero
-            |  Speed = 1
+            |DungeonHero Rogue
             |  Kind = A
             |  Kind = B
-            |  <warning descr="Key 'speed' is already set in this block on line 3">speed = 2</warning>
             |  Holds = bow
             |  HeldIn = left
+            |  HeldRoll = 180
             |  Holds = quiver
             |  HeldIn = back
+            |  HeldRoll = 12
+            |  Library = a
+            |  Library = b
+            |  Library = c
+            |End
+            |DungeonHero Knight
+            |  Kind = C
+            |  Kind = D
+            |  Holds = sword
+            |  HeldIn = right
+            |  Holds = shield
+            |  HeldIn = left
+            |  Speed = 1
+            |  <warning descr="Key 'speed' is already set in this block on line 22">speed = 2</warning>
             |  <warning descr="Unrecognized line: expected 'Key = value' or End">42 = x</warning>
+            |End
+            |Object Hero
             |  Update = MoveUpdate Tag
+            |    TurnRate = 0
             |    Speed = 2
+            |    <warning descr="Key 'Speed' is already set in this block on line 29">Speed = 3</warning>
             |  End
             |End
             |<error descr="End without an open block">End</error>

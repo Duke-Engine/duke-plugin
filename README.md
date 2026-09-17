@@ -19,8 +19,11 @@ Every `*.ini` file opens as **Duke INI** and gets:
 - **Checks:**
   - error on a block with no `End`, and on an `End` with no open block;
   - warning on a line that is neither a header nor `Key = value`, and on a key set twice in one block.
-    Keys written as lists (`Kind` twice in a row) or as repeating groups (`Holds` / `HeldIn` per held
-    item) are not counted.
+    A repeated key counts as a list, and is not flagged, when another block of the same type in the file
+    repeats it too (`Kind` in `DungeonEffect`), when it runs three or more lines in a row, or when it
+    comes once after each such list key (`HeldRoll` after each `Holds`).
+  - Field names are not checked: `fsdgge = 345` is valid syntax. The engine rejects it when it loads
+    the file.
 - **Navigation:** Ctrl+Click a name used elsewhere to reach its definition, e.g. `Rogue` in `DungeonSkill Rogue Q`
   or `HeavyArrow` in `Projectile = HeavyArrow`. Ctrl+Click a block's own name to list its usages.
 

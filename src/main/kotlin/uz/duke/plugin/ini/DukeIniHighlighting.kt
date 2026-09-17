@@ -76,22 +76,25 @@ class DukeIniAnnotator : Annotator, DumbAware {
     }
 
     /**
-     * Some keys are lists (`Kind = FLAME_TRAIL` / `Kind = IMPACT_BURST`) and some repeat
-     * as a group (`Holds`, `HeldIn`, `HeldScale` once per held item), so a repeat only
-     * counts when neither shape explains it.
+     * A key set twice is a mistake unless it is a list. Without the engine's field
+     * tables, a list is recognised from the file itself:
+     * - another section of the same type repeats it too (`Kind` in `DungeonEffect`, `File` in `DungeonSound`);
+     * - it runs three or more lines in a row (`Library` in `DungeonAnimations`);
+     * - it comes once after each occurrence of such a list key (`HeldRoll` after each `Holds`).
      */
     private fun duplicateKeys(section: DukeIniSection, holder: AnnotationHolder) {
         val fields = section.fields
         if (fields.size < 2) return
-        val listKeys = (section.containingFile as? DukeIniFile)?.listKeys.orEmpty()
-        val positions = fields.indices.groupBy { fields[it].key }
-        for ((key, at) in positions) {
-            if (at.size < 2 || key in listKeys) continue
-            val grouped = at.zipWithNext().all { (a, b) ->
-                (a + 1 until b).map { fields[it].key }
-                    .any { it != key && it !in listKeys && positions.getValue(it).size == at.size }
-            }
-            if (grouped) continue
+        val keys = fields.map { it.key }
+        val counts = keys.groupingBy { it }.eachCount()
+        val sameType = (section.containingFile as? DukeIniFile)?.repeatedKeys?.get(section.sectionType).orEmpty()
+        // This section is one of the sections counted, so a list needs a count of two.
+        fun isList(key: String) = (sameType[key] ?: 0) > 1
+        for ((key, count) in counts) {
+            if (count < 2 || isList(key)) continue
+            val at = keys.indices.filter { keys[it] == key }
+            if (count >= 3 && at.zipWithNext().all { (a, b) -> b == a + 1 }) continue
+            if (counts.any { (other, n) -> n == count && other != key && isList(other) && alternates(keys, other, key) }) continue
             val first = fields[at.first()]
             val line = PsiDocumentManager.getInstance(section.project).getDocument(section.containingFile)
                 ?.getLineNumber(first.textOffset)?.plus(1) ?: 0
@@ -101,6 +104,10 @@ class DukeIniAnnotator : Annotator, DumbAware {
             }
         }
     }
+
+    /** `a k a k ...` once the other keys are dropped. */
+    private fun alternates(keys: List<String>, a: String, k: String) =
+        keys.filter { it == a || it == k }.withIndex().all { (i, key) -> key == if (i % 2 == 0) a else k }
 
     private fun AnnotationHolder.problem(severity: HighlightSeverity, range: TextRange, key: String, vararg params: Any) {
         newAnnotation(severity, DukeBundle.message(key, *params)).range(range).create()

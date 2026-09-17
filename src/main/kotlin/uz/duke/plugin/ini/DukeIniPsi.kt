@@ -51,6 +51,9 @@ abstract class DukeIniSection(node: ASTNode) : ASTWrapperPsiElement(node) {
     /** The first line as written, spacing normalised: `Object Rogue`, `Update = MoveUpdate Tag`. */
     abstract val presentableText: String
 
+    /** What kind of section this is, lower case: `dungeonhero`, `module moveupdate`. */
+    abstract val sectionType: String
+
     override fun getPresentation(): ItemPresentation = PresentationData(presentableText, null, getIcon(0), null)
 }
 
@@ -66,6 +69,9 @@ class DukeIniBlock(node: ASTNode) : DukeIniSection(node), PsiNameIdentifierOwner
 
     override val presentableText: String
         get() = header.words.joinToString(" ")
+
+    override val sectionType: String
+        get() = blockType.lowercase()
 
     /** A one-name header declares that name; `DungeonSkill Rogue Q` only points at Rogue. */
     override fun getNameIdentifier(): DukeIniWord? = header.names.singleOrNull()
@@ -87,6 +93,9 @@ class DukeIniModule(node: ASTNode) : DukeIniSection(node) {
                 .filter { it.elementType in LINE_WORDS }.map { it.text }
             return (listOf(words.first(), "=") + words.drop(1)).joinToString(" ")
         }
+
+    override val sectionType: String
+        get() = "module " + node.findChildByType(T.MODULE_NAME)?.text.orEmpty().lowercase()
 
     override fun getIcon(flags: Int) = AllIcons.Nodes.Plugin
 
@@ -118,8 +127,6 @@ class DukeIniField(node: ASTNode) : ASTWrapperPsiElement(node) {
     /** Lower case: the engine looks fields up case-insensitively. */
     val key: String
         get() = keyText.lowercase()
-
-    fun prevField(): DukeIniField? = PsiTreeUtil.skipWhitespacesAndCommentsBackward(this) as? DukeIniField
 }
 
 class DukeIniBadLine(node: ASTNode) : ASTWrapperPsiElement(node)
