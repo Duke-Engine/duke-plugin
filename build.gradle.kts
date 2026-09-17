@@ -19,8 +19,15 @@ dependencies {
     intellijPlatform {
         intellijIdea("2025.3.5")
         testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.Plugin.Java)
 
-        // Add plugin dependencies for compilation here, for example:
-        // bundledPlugin("com.intellij.java")
+        // Module names are checked against the engine's Java classes.
+        bundledPlugin("com.intellij.java")
     }
+}
+
+tasks.test {
+    // The IDE bundles plugins (Vue among them) that cannot start from the test classpath and fail
+    // any test that completes or renames; load only this plugin and what it depends on.
+    systemProperty("idea.load.plugins.id", "uz.duke.plugin")
 }

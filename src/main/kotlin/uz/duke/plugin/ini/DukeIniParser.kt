@@ -52,7 +52,7 @@ class DukeIniParser : PsiParser {
                 T.BLOCK_TYPE -> return false
                 T.MODULE_KEY -> {
                     val module = b.mark()
-                    line(b)
+                    line(b) { if (it == T.MODULE_NAME) T.MODULE_NAME_ELEMENT else null }
                     body(b)
                     module.done(T.MODULE_ELEMENT)
                 }
@@ -101,6 +101,7 @@ class DukeIniParserDefinition : ParserDefinition {
     override fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
         T.BLOCK_ELEMENT -> DukeIniBlock(node)
         T.MODULE_ELEMENT -> DukeIniModule(node)
+        T.MODULE_NAME_ELEMENT -> DukeIniModuleName(node)
         T.HEADER_ELEMENT -> DukeIniHeader(node)
         T.FIELD_ELEMENT -> DukeIniField(node)
         T.NAME_ELEMENT, T.VALUE_ELEMENT -> DukeIniWord(node)

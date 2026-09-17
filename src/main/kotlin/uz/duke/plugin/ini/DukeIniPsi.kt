@@ -87,6 +87,10 @@ class DukeIniBlock(node: ASTNode) : DukeIniSection(node), PsiNameIdentifierOwner
 }
 
 class DukeIniModule(node: ASTNode) : DukeIniSection(node) {
+    /** `MoveUpdate` in `Update = MoveUpdate Tag`; null while the line has no name yet. */
+    val moduleName: DukeIniModuleName?
+        get() = PsiTreeUtil.getChildOfType(this, DukeIniModuleName::class.java)
+
     override val presentableText: String
         get() {
             val words = node.getChildren(null).takeWhile { it.elementType != T.FIELD_ELEMENT && it.elementType != T.END }
@@ -95,13 +99,19 @@ class DukeIniModule(node: ASTNode) : DukeIniSection(node) {
         }
 
     override val sectionType: String
-        get() = "module " + node.findChildByType(T.MODULE_NAME)?.text.orEmpty().lowercase()
+        get() = "module " + moduleName?.text.orEmpty().lowercase()
 
     override fun getIcon(flags: Int) = AllIcons.Nodes.Plugin
 
     private companion object {
-        val LINE_WORDS = TokenSet.create(T.MODULE_KEY, T.MODULE_NAME, T.VALUE, T.NUMBER, T.STRING)
+        val LINE_WORDS = TokenSet.create(T.MODULE_KEY, T.MODULE_NAME_ELEMENT, T.VALUE, T.NUMBER, T.STRING)
     }
+}
+
+/** Points at the engine class the module is built from; see [DukeModuleReference]. */
+class DukeIniModuleName(node: ASTNode) : ASTWrapperPsiElement(node) {
+    override fun getReference(): PsiReference = DukeModuleReference(this)
+    override fun getReferences(): Array<PsiReference> = arrayOf(reference)
 }
 
 class DukeIniHeader(node: ASTNode) : ASTWrapperPsiElement(node) {
@@ -164,18 +174,27 @@ class DukeIniReference(element: DukeIniWord) :
 
 object DukeIniDeclarations {
     // ponytail: walks every INI file per lookup (each file caches its own map); a stub index when projects hold hundreds.
-    fun find(project: Project, name: String): List<DukeIniBlock> {
+    fun find(project: Project, name: String): List<DukeIniBlock> =
+        files(project)
+            .flatMap { it.declarations[name].orEmpty() }
+            .sortedBy { if (it.blockType.equals("Object", ignoreCase = true)) 0 else 1 }
+
+    fun files(project: Project): List<DukeIniFile> {
         val psiManager = PsiManager.getInstance(project)
         return FileTypeIndex.getFiles(DukeIniFileType, GlobalSearchScope.projectScope(project))
             .sortedBy { it.path }
-            .flatMap { (psiManager.findFile(it) as? DukeIniFile)?.declarations?.get(name).orEmpty() }
-            .sortedBy { if (it.blockType.equals("Object", ignoreCase = true)) 0 else 1 }
+            .mapNotNull { psiManager.findFile(it) as? DukeIniFile }
     }
 }
 
 class DukeIniFindUsagesProvider : FindUsagesProvider {
     override fun getWordsScanner(): WordsScanner =
-        DefaultWordsScanner(DukeIniLexer(), TokenSet.create(T.NAME, T.VALUE), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING))
+        object : DefaultWordsScanner(
+            DukeIniLexer(), TokenSet.create(T.NAME, T.VALUE, T.MODULE_NAME), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING),
+        ) {
+            // Module names joined the word index in version 1: Find Usages and Rename of a module class reach INI files.
+            override fun getVersion() = 1
+        }
 
     override fun canFindUsagesFor(element: PsiElement) = element is DukeIniBlock && element.name != null
     override fun getHelpId(element: PsiElement): String? = null

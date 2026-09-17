@@ -1,9 +1,12 @@
 package uz.duke.plugin.ini
 
+import com.intellij.codeInsight.completion.CompletionParameters
+import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import uz.duke.plugin.engine.DukeModules
 import java.io.File
 
 class DukeIniTest : BasePlatformTestCase() {
@@ -68,6 +71,16 @@ class DukeIniTest : BasePlatformTestCase() {
             """.trimMargin(),
         )
         myFixture.checkHighlighting()
+    }
+
+    /** This project has no engine classes: nothing to check module names against, and completion says why. */
+    fun testWithoutTheEngineModulesAreLeftAlone() {
+        myFixture.configureByText("units.ini", "Object Hero\n  Update = Anything<caret> Tag\n    Whatever = 1\n  End\nEnd\n")
+        assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING))
+        assertNull(DukeModules.of(myFixture.file))
+        val position = myFixture.file.findElementAt(myFixture.caretOffset - 1)!!
+        val parameters = CompletionParameters(position, myFixture.file, CompletionType.BASIC, myFixture.caretOffset, 1, myFixture.editor) { false }
+        assertEquals("Duke Engine not found on classpath", DukeModuleCompletionContributor().handleEmptyLookup(parameters, myFixture.editor))
     }
 
     fun testFolding() = myFixture.testFolding("$testDataPath/folding.ini")

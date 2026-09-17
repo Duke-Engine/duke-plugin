@@ -12,11 +12,16 @@
             <li>Structure view listing every block and the modules inside each <code>Object</code></li>
             <li>Checks for unclosed blocks, stray <code>End</code> lines, unrecognized lines and keys set twice in one block</li>
             <li>Ctrl+Click from a block name used elsewhere, such as the hero a <code>DungeonSkill</code> belongs to, to its definition</li>
+            <li>Module names and module fields completed and checked against the engine's <code>Module</code> classes
+                on the project classpath; Ctrl+Click from a module name to its class</li>
+            <li>A warning where <code>ModuleFactory.register</code> gives a module a name other than its class name,
+                with a quick fix</li>
         </ul>
-        The plugin reads only the INI text. It does not check block types, fields or module names against the engine code.
+        Block types and the fields of blocks other than modules are not checked.
         ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
 
     <resource-bundle>messages.DukeBundle</resource-bundle>
 
@@ -30,6 +35,15 @@
         <lang.psiStructureViewFactory language="DukeIni"
                                       implementationClass="uz.duke.plugin.ini.DukeIniStructureViewFactory"/>
         <lang.findUsagesProvider language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFindUsagesProvider"/>
+        <lang.elementManipulator forClass="uz.duke.plugin.ini.DukeIniModuleName"
+                                 implementationClass="uz.duke.plugin.ini.DukeIniModuleNameManipulator"/>
         <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniAnnotator"/>
+        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeModuleAnnotator"/>
+        <completion.contributor language="DukeIni"
+                                implementationClass="uz.duke.plugin.ini.DukeModuleCompletionContributor"/>
+        <localInspection language="JAVA" shortName="DukeModuleRegistration"
+                         bundle="messages.DukeBundle" key="inspection.registration.name" groupKey="inspection.group"
+                         enabledByDefault="true" level="WARNING"
+                         implementationClass="uz.duke.plugin.engine.DukeModuleRegistrationInspection"/>
     </extensions>
 </idea-plugin>

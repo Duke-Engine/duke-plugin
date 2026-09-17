@@ -6,8 +6,8 @@
 ## Overview
 
 An IntelliJ Platform plugin that lets the IDE read Duke Engine's INI files (`Object Rogue` … `End`,
-`Update = MoveUpdate Tag` … `End`, `DungeonSkill Rogue Q` …). It stands alone: it knows the INI
-format only, not the engine's Java code.
+`Update = MoveUpdate Tag` … `End`, `DungeonSkill Rogue Q` …). The format itself it reads alone; module
+lines it checks against the engine's Java classes on the project classpath.
 
 ## Features
 
@@ -22,10 +22,34 @@ Every `*.ini` file opens as **Duke INI** and gets:
     A repeated key counts as a list, and is not flagged, when another block of the same type in the file
     repeats it too (`Kind` in `DungeonEffect`), when it runs three or more lines in a row, or when it
     comes once after each such list key (`HeldRoll` after each `Holds`).
-  - Field names are not checked: `fsdgge = 345` is valid syntax. The engine rejects it when it loads
-    the file.
+  - Outside module blocks, field names are not checked: `fsdgge = 345` is valid syntax there. The engine
+    rejects it when it loads the file.
 - **Navigation:** Ctrl+Click a name used elsewhere to reach its definition, e.g. `Rogue` in `DungeonSkill Rogue Q`
   or `HeavyArrow` in `Projectile = HeavyArrow`. Ctrl+Click a block's own name to list its usages.
+
+### Modules
+
+Every concrete subclass of `uz.duke.core.module.Module` that an INI file's module can see on its
+classpath (the engine's jars, or its sources when the engine is the open project) is a module, and its
+INI name is its class name. The list is read from IntelliJ's Java model, not `java.lang.reflect`: the IDE
+runs on Java 21 and the engine is compiled for 25. It is cached, and dropped whenever a Java file, a class
+file or the classpath changes, so a new module shows up as soon as its class exists.
+
+- **Completion** of module names after `Update =`, `Body =`, `Behavior =`, `Draw =` and `ClientUpdate =`
+  (the list opens on the space after `=`), and inside a module block, of the fields that module reads.
+- **Checks:** error on a module name no class carries (`Unknown module 'MoveUpdat'`; names are
+  case-sensitive, as `ModuleFactory` is); warning on a field the module's `FieldParseTable` does not read.
+  Fields are read from the `FieldParseTable.add("Speed", …)` calls in the module class, so they are not
+  checked for a class with no source to read or one that builds no table.
+- **Navigation:** Ctrl+Click a module name to open its class. Renaming the class renames the INI lines.
+- A class with a `TAG_PREFIX` constant owns every name that starts with it: `Script:HeroBrain` is a
+  `ScriptModule`. The part after the prefix comes from game data and is not checked.
+- **Registration check** (Java): `ModuleFactory.register("mover", … new MoveUpdate(…) …)` is a warning,
+  `Registered name 'mover' does not match class name 'MoveUpdate'`. The quick fix registers the class name
+  and renames the INI lines that used `mover`.
+
+Without the engine on the classpath, module lines are not checked and completion says
+`Duke Engine not found on classpath`; everything else works as before.
 
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests:
 `./gradlew test`. They also check that every file in `dungeon/src/main/resources/ini` loads with no problems.

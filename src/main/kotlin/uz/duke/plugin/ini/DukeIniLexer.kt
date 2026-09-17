@@ -29,6 +29,7 @@ object DukeIniTypes {
     @JvmField val BLOCK_ELEMENT = DukeIniElementType("BLOCK")
     @JvmField val HEADER_ELEMENT = DukeIniElementType("HEADER")
     @JvmField val MODULE_ELEMENT = DukeIniElementType("MODULE")
+    @JvmField val MODULE_NAME_ELEMENT = DukeIniElementType("MODULE_NAME_REF")
     @JvmField val FIELD_ELEMENT = DukeIniElementType("FIELD")
     @JvmField val NAME_ELEMENT = DukeIniElementType("NAME_REF")
     @JvmField val VALUE_ELEMENT = DukeIniElementType("VALUE_REF")
