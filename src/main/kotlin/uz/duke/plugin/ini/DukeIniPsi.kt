@@ -26,13 +26,18 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.IncorrectOperationException
 import uz.duke.plugin.ini.DukeIniTypes as T
 
-/** A block or an Object's module: a first line, fields, and (if closed) an End. */
+/** A block, a unit's module or a section inside a block: a first line, fields, and (if closed) an End. */
 abstract class DukeIniSection(node: ASTNode) : ASTWrapperPsiElement(node) {
     val isClosed: Boolean
         get() = node.findChildByType(T.END) != null
 
+    /** Its own fields; a module's are inside the module. */
     val fields: List<DukeIniField>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniField::class.java)
+
+    /** Its modules and sections, in the order written. */
+    val parts: List<DukeIniSection>
+        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniSection::class.java)
 
     /** The first line, without its comment. */
     val headerRange: TextRange
@@ -51,7 +56,7 @@ abstract class DukeIniSection(node: ASTNode) : ASTWrapperPsiElement(node) {
     /** The first line as written, spacing normalised: `Object Rogue`, `Update = MoveUpdate Tag`. */
     abstract val presentableText: String
 
-    /** What kind of section this is, lower case: `dungeonhero`, `module moveupdate`. */
+    /** What kind of section this is, lower case: `hero`, `module moveupdate`, `world/generation`. */
     abstract val sectionType: String
 
     override fun getPresentation(): ItemPresentation = PresentationData(presentableText, null, getIcon(0), null)
@@ -101,11 +106,35 @@ class DukeIniModule(node: ASTNode) : DukeIniSection(node) {
     override val sectionType: String
         get() = "module " + moduleName?.text.orEmpty().lowercase()
 
+    /** `Update` in `Update = MoveUpdate Tag`. */
+    val moduleKey: String
+        get() = firstChild.text
+
     override fun getIcon(flags: Int) = AllIcons.Nodes.Plugin
 
     private companion object {
         val LINE_WORDS = TokenSet.create(T.MODULE_KEY, T.MODULE_NAME_ELEMENT, T.VALUE, T.NUMBER, T.STRING)
     }
+}
+
+/** A section inside a block — `Generation = Layout`, its fields, its End — as a game's `World` block holds them. */
+class DukeIniSubsection(node: ASTNode) : DukeIniSection(node) {
+    /** `Generation` in `Generation = Layout`. */
+    val key: String
+        get() = firstChild.text
+
+    /** `Layout`; a section may take two, `Tone = Forest Wooded`. */
+    val names: List<DukeIniWord>
+        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniWord::class.java)
+
+    override val presentableText: String
+        get() = "$key = " + names.joinToString(" ") { it.text }
+
+    /** Under the type of what holds it, as a key means what its block makes it mean: `world/generation`. */
+    override val sectionType: String
+        get() = (parent as? DukeIniSection)?.sectionType.orEmpty() + "/" + key.lowercase()
+
+    override fun getIcon(flags: Int) = AllIcons.Nodes.Folder
 }
 
 /** Points at the engine class the module is built from; see [DukeModuleReference]. */
@@ -146,6 +175,10 @@ class DukeIniField(node: ASTNode) : ASTWrapperPsiElement(node) {
     val valueText: String?
         get() = node.findChildByType(VALUES)?.text
 
+    /** Everything after `=`, as written: `INFANTRY SELECTABLE` in `KindOf = INFANTRY SELECTABLE`. */
+    val value: String
+        get() = node.findChildByType(T.EQ)?.let { text.substring(it.startOffsetInParent + 1).trim() } ?: ""
+
     private companion object {
         val VALUES = TokenSet.create(T.VALUE_ELEMENT, T.NUMBER, T.STRING)
     }
@@ -166,8 +199,8 @@ class DukeIniWord(node: ASTNode) : ASTWrapperPsiElement(node) {
 
 /**
  * Soft: most values (`Speed = 27.2`, `Kind = MANA`) name nothing, so an unresolved
- * one is not an error. A resolved one may have several targets — `Rogue` is an
- * `Object`, a `DungeonHero` and a `DungeonPortrait` — and Objects come first.
+ * one is not an error. A resolved one may have several targets — `Rogue` is a unit's
+ * block and a companion's in a game that writes a unit as several — and Objects come first.
  */
 class DukeIniReference(element: DukeIniWord) :
     PsiPolyVariantReferenceBase<DukeIniWord>(element, TextRange(0, element.textLength), true) {

@@ -30,7 +30,7 @@ class DukeIniStructureViewFactory : PsiStructureViewFactory {
         }
 }
 
-/** Blocks, and under an Object the modules it is made of. */
+/** Blocks, and under each the modules and sections it is made of. */
 class DukeIniStructureViewModel(file: PsiFile, editor: Editor?) :
     StructureViewModelBase(file, editor, DukeIniStructureElement(file)), StructureViewModel.ElementInfoProvider {
 
@@ -57,7 +57,7 @@ class DukeIniStructureElement(private val element: NavigatablePsiElement) : Stru
     override fun getChildren(): Array<TreeElement> {
         val children = when (element) {
             is DukeIniFile -> element.blocks
-            is DukeIniBlock -> element.modules
+            is DukeIniSection -> element.parts
             else -> emptyList()
         }
         return children.map { DukeIniStructureElement(it) }.toTypedArray<TreeElement>()

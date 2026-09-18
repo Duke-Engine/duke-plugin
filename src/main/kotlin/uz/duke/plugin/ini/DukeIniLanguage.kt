@@ -34,18 +34,5 @@ class DukeIniFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, Du
             CachedValueProvider.Result.create(blocks.filter { it.name != null }.groupBy { it.name!! }, this)
         }
 
-    /** Section type -> key -> how many sections of that type write the key more than once. */
-    val repeatedKeys: Map<String, Map<String, Int>>
-        get() = CachedValuesManager.getCachedValue(this) {
-            val counts = HashMap<String, HashMap<String, Int>>()
-            for (section in PsiTreeUtil.findChildrenOfType(this, DukeIniSection::class.java)) {
-                val perType = counts.getOrPut(section.sectionType) { HashMap() }
-                section.fields.groupingBy { it.key }.eachCount()
-                    .filterValues { it > 1 }
-                    .keys.forEach { perType.merge(it, 1, Int::plus) }
-            }
-            CachedValueProvider.Result.create(counts, this)
-        }
-
     override fun toString() = "Duke INI file"
 }

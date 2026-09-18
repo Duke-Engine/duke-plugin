@@ -14,12 +14,12 @@ class DukeIniTest : BasePlatformTestCase() {
 
     /** The game's own files are the spec: not one of them may raise a problem. */
     fun testGameFilesAreClean() {
-        val files = File("../dungeon/src/main/resources/ini").listFiles { f -> f.extension == "ini" }.orEmpty()
+        val files = File("../dungeon/src/main/resources/ini").walkTopDown().filter { it.extension == "ini" }.toList()
         assertTrue("no INI files found next to the plugin", files.size >= 5)
-        for (file in files) {
+        assertEmpty(files.flatMap { file ->
             myFixture.configureByText(file.name, file.readText())
-            assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${file.name}: ${it.description} at '${it.text}'" })
-        }
+            myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
+        })
     }
 
     fun testProblems() {
@@ -48,14 +48,14 @@ class DukeIniTest : BasePlatformTestCase() {
             |  Holds = shield
             |  HeldIn = left
             |  Speed = 1
-            |  <warning descr="Key 'speed' is already set in this block on line 22">speed = 2</warning>
+            |  speed = 2
             |  <warning descr="Unrecognized line: expected 'Key = value' or End">42 = x</warning>
             |End
             |Object Hero
             |  Update = MoveUpdate Tag
             |    TurnRate = 0
             |    Speed = 2
-            |    <warning descr="Key 'Speed' is already set in this block on line 29">Speed = 3</warning>
+            |    Speed = 3
             |  End
             |End
             |<error descr="End without an open block">End</error>
@@ -83,6 +83,33 @@ class DukeIniTest : BasePlatformTestCase() {
         assertEquals("Duke Engine not found on classpath", DukeModuleCompletionContributor().handleEmptyLookup(parameters, myFixture.editor))
     }
 
+    /** A block may hold sections, `Generation = Layout` to its own End: told from a field by what is indented under it. */
+    fun testSectionsInsideABlock() {
+        myFixture.configureByText(
+            "world.ini",
+            """
+            |World Dungeon
+            |  LevelHeight = 10
+            |  Generation = Layout
+            |    MapWidth = 50
+            |  End
+            |  Stage = Play
+            |  End
+            |  Tone = Forest Wooded
+            |    Floor = a.obj
+            |  End
+            |  Name = Deep
+            |End
+            """.trimMargin(),
+        )
+        assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING))
+        val world = (myFixture.file as DukeIniFile).blocks.single()
+        assertEquals(listOf("LevelHeight", "Name"), world.fields.map { it.keyText })
+        assertEquals(listOf("Generation = Layout", "Stage = Play", "Tone = Forest Wooded"), world.parts.map { it.presentableText })
+        assertEquals(listOf("MapWidth"), world.parts[0].fields.map { it.keyText })
+        assertEquals("world/generation", world.parts[0].sectionType)
+    }
+
     fun testFolding() = myFixture.testFolding("$testDataPath/folding.ini")
 
     fun testStructureView() {
@@ -99,6 +126,11 @@ class DukeIniTest : BasePlatformTestCase() {
             |End
             |DungeonSkill Rogue Q
             |End
+            |World Dungeon
+            |  Generation = Layout
+            |    MapWidth = 50
+            |  End
+            |End
             """.trimMargin(),
         )
         myFixture.testStructureView { component ->
@@ -111,6 +143,8 @@ class DukeIniTest : BasePlatformTestCase() {
                 |  Update = MoveUpdate Tag
                 |  Behavior = ExperienceModule Tag
                 | DungeonSkill Rogue Q
+                | -World Dungeon
+                |  Generation = Layout
                 |""".trimMargin(),
             )
         }

@@ -4,11 +4,10 @@ import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiCompiledElement
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiLiteralExpression
-import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiNewExpression
 import com.intellij.psi.search.GlobalSearchScope
@@ -16,6 +15,7 @@ import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
+import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.containers.ConcurrentFactoryMap
@@ -26,9 +26,16 @@ import com.intellij.util.containers.ConcurrentFactoryMap
  * them to it). A class declaring `TAG_PREFIX` is registered once per name under that prefix
  * instead, as `ScriptModule` is under `Script:<name>`, so it owns every name the prefix starts.
  *
- * [fields] are what its `FieldParseTable` reads, or null when they cannot be known.
+ * [specs] are what its `FieldParseTable` reads, or null when they cannot be known. [groups] are its
+ * `@ModuleGroup` families, and [key] the `Object` field it is written under when no file says otherwise.
  */
-class DukeModule(val name: String, val psiClass: PsiClass, val isPrefix: Boolean, val fields: List<String>?) {
+class DukeModule(
+    val name: String, val psiClass: PsiClass, val isPrefix: Boolean,
+    val specs: List<FieldSpec>?, val groups: List<String>, val key: String,
+) {
+    val fields: List<String>?
+        get() = specs?.map { it.name }
+
     fun isNamedBy(text: String) = if (isPrefix) text.length > name.length && text.startsWith(name) else text == name
 }
 
@@ -79,29 +86,41 @@ object DukeModules {
             .sortedBy { it.qualifiedName }
         return DukeEngine(classes.map { cls ->
             val prefix = prefixOf(cls)
-            DukeModule(prefix ?: cls.name!!, cls, prefix != null, fieldsOf(cls))
+            DukeModule(prefix ?: cls.name!!, cls, prefix != null, fieldsOf(cls), groupsOf(cls), keyOf(cls))
         })
     }
 
     /**
-     * The tokens `FieldParseTable.add("Speed", ...)` registers in the class, in source order.
+     * What the class's `FieldParseTable.add("Speed", ...)` calls read, in source order.
      * Null for a class with no source to read, or one that builds no table and so may parse its
      * block elsewhere: better to check nothing than to flag fields that are fine.
      */
-    private fun fieldsOf(cls: PsiClass): List<String>? {
+    private fun fieldsOf(cls: PsiClass): List<FieldSpec>? {
         val source = cls.navigationElement as? PsiClass
         if (source == null || source is PsiCompiledElement) return null
         val buildsTable = PsiTreeUtil.findChildrenOfType(source, PsiNewExpression::class.java)
             .any { it.classReference?.qualifiedName == FIELD_TABLE_CLASS }
         if (!buildsTable) return null
-        return PsiTreeUtil.findChildrenOfType(source, PsiMethodCallExpression::class.java)
-            .filter { it.methodExpression.referenceName == "add" }
-            .mapNotNull { call ->
-                val token = call.argumentList.expressions.firstOrNull() as? PsiLiteralExpression
-                token?.takeIf { it.value is String && call.resolveMethod()?.containingClass?.qualifiedName == FIELD_TABLE_CLASS }
-            }
-            .sortedBy { it.textOffset } // a chain's last add() is the outermost call, so the tree lists it first
-            .map { it.value as String }
-            .distinct()
+        return DukeSchemas.fieldsIn(source)
     }
+
+    /** `@ModuleGroup` is `@Inherited`, so a class without one takes its nearest superclass's. */
+    private fun groupsOf(cls: PsiClass): List<String> {
+        for (type in generateSequence(cls) { it.superClass }) {
+            val value = type.getAnnotation(GROUP_ANNOTATION)?.findAttributeValue("value") ?: continue
+            val items = (value as? PsiArrayInitializerMemberValue)?.initializers?.toList() ?: listOf(value)
+            return items.mapNotNull(DukeSchemas::constantString)
+        }
+        return emptyList()
+    }
+
+    private fun keyOf(cls: PsiClass): String = when {
+        InheritanceUtil.isInheritor(cls, BODY_CLASS) -> "Body"
+        InheritanceUtil.isInheritor(cls, UPDATE_CLASS) -> "Update"
+        else -> "Behavior"
+    }
+
+    private const val GROUP_ANNOTATION = "uz.duke.core.module.ModuleGroup"
+    private const val BODY_CLASS = "uz.duke.core.module.BodyModule"
+    private const val UPDATE_CLASS = "uz.duke.core.module.UpdateModule"
 }

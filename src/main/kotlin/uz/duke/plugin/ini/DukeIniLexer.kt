@@ -15,6 +15,7 @@ object DukeIniTypes {
     @JvmField val BLOCK_TYPE = DukeIniElementType("BLOCK_TYPE") // `Object` in `Object Rogue`
     @JvmField val KEY = DukeIniElementType("KEY")
     @JvmField val MODULE_KEY = DukeIniElementType("MODULE_KEY") // `Update` in `Update = MoveUpdate Tag`
+    @JvmField val SECTION_KEY = DukeIniElementType("SECTION_KEY") // `Generation` in `Generation = Layout`, a section inside a block
     @JvmField val END = DukeIniElementType("END")
     @JvmField val BAD = DukeIniElementType("BAD") // starts a line that fits nothing
     @JvmField val NAME = DukeIniElementType("NAME")
@@ -29,13 +30,14 @@ object DukeIniTypes {
     @JvmField val BLOCK_ELEMENT = DukeIniElementType("BLOCK")
     @JvmField val HEADER_ELEMENT = DukeIniElementType("HEADER")
     @JvmField val MODULE_ELEMENT = DukeIniElementType("MODULE")
+    @JvmField val SECTION_ELEMENT = DukeIniElementType("SECTION")
     @JvmField val MODULE_NAME_ELEMENT = DukeIniElementType("MODULE_NAME_REF")
     @JvmField val FIELD_ELEMENT = DukeIniElementType("FIELD")
     @JvmField val NAME_ELEMENT = DukeIniElementType("NAME_REF")
     @JvmField val VALUE_ELEMENT = DukeIniElementType("VALUE_REF")
     @JvmField val BAD_LINE_ELEMENT = DukeIniElementType("BAD_LINE")
 
-    @JvmField val LINE_STARTS = TokenSet.create(BLOCK_TYPE, KEY, MODULE_KEY, END, BAD)
+    @JvmField val LINE_STARTS = TokenSet.create(BLOCK_TYPE, KEY, MODULE_KEY, SECTION_KEY, END, BAD)
 }
 
 /**
@@ -43,8 +45,8 @@ object DukeIniTypes {
  * `;` comments to the end of the line, control characters count as space — and
  * tracks block depth so each line's first token can say what the line is.
  *
- * The state packs depth, "inside an Object block" and where on the line we are;
- * depth 0 at a line start is state 0, the only point the editor restarts from.
+ * The state packs depth and where on the line we are; depth 0 at a line start is
+ * state 0, the only point the editor restarts from.
  */
 class DukeIniLexer : LexerBase() {
     private var buffer: CharSequence = ""
@@ -54,7 +56,6 @@ class DukeIniLexer : LexerBase() {
     private var tokenType: IElementType? = null
     private var tokenState = 0
     private var depth = 0
-    private var inObject = false
     private var role = LINE_START
 
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
@@ -62,7 +63,6 @@ class DukeIniLexer : LexerBase() {
         bufferEnd = endOffset
         tokenEnd = startOffset
         role = initialState and 0x7
-        inObject = initialState and 0x8 != 0
         depth = initialState shr 4
         advance()
     }
@@ -75,7 +75,7 @@ class DukeIniLexer : LexerBase() {
     override fun getBufferEnd() = bufferEnd
 
     override fun advance() {
-        tokenState = role or (if (inObject) 0x8 else 0) or (depth shl 4)
+        tokenState = role or (depth shl 4)
         tokenStart = tokenEnd
         if (tokenStart >= bufferEnd) {
             tokenType = null
@@ -115,7 +115,6 @@ class DukeIniLexer : LexerBase() {
         role = OTHER
         if (word.equals("End", ignoreCase = true)) {
             if (depth > 0) depth--
-            if (depth == 0) inObject = false
             return DukeIniTypes.END
         }
         val identifier = IDENTIFIER.matches(word)
@@ -126,18 +125,57 @@ class DukeIniLexer : LexerBase() {
         return when {
             header -> {
                 depth = 1
-                inObject = word.equals("Object", ignoreCase = true)
                 role = HEADER
                 DukeIniTypes.BLOCK_TYPE
             }
             depth == 0 || !identifier -> DukeIniTypes.BAD
-            hasEq && depth == 1 && inObject && MODULE_FIELDS.any { it.equals(word, ignoreCase = true) } -> {
+            hasEq && depth == 1 && MODULE_FIELDS.any { it.equals(word, ignoreCase = true) } -> {
                 depth = 2
                 role = MODULE_HEAD
                 DukeIniTypes.MODULE_KEY
             }
+            hasEq && opensSection() -> {
+                depth++
+                role = HEADER
+                DukeIniTypes.SECTION_KEY
+            }
             else -> DukeIniTypes.KEY
         }
+    }
+
+    /**
+     * Whether `Generation = Layout` opens a section of its own rather than being a field: named with
+     * plain words, and followed by lines indented under it, or by its End at its own indent. Which keys
+     * open one is the game's code, which the lexer cannot see, so the layout is what it goes by.
+     */
+    // ponytail: told by indentation alone; a field whose next line is indented deeper by mistake reads as a section.
+    private fun opensSection(): Boolean {
+        var i = tokenEnd
+        var names = 0
+        while (i < bufferEnd && buffer[i] != '\n' && buffer[i] != ';') {
+            if (isSeparator(buffer[i])) {
+                i++
+                continue
+            }
+            val start = i
+            i = skip(i) { !isSeparator(it) }
+            if (!IDENTIFIER.matches(buffer.subSequence(start, i))) return false
+            names++
+        }
+        if (names == 0) return false
+        var lineStart = tokenStart
+        while (lineStart > 0 && buffer[lineStart - 1] != '\n') lineStart--
+        val indent = tokenStart - lineStart
+        while (i < bufferEnd) {
+            val next = if (buffer[i] == '\n') i + 1 else skip(i) { it != '\n' } + 1
+            val first = skip(next) { it == ' ' || it == '\t' }
+            i = first
+            if (first >= bufferEnd || buffer[first] == '\n' || buffer[first] == '\r' || buffer[first] == ';') continue
+            val word = buffer.subSequence(first, skip(first) { !isSeparator(it) })
+            val nextIndent = first - next
+            return nextIndent > indent || (indent > 0 && nextIndent == indent && word.toString().equals("End", ignoreCase = true))
+        }
+        return false
     }
 
     private fun midLine(quoted: Boolean): IElementType = when {
@@ -163,7 +201,7 @@ class DukeIniLexer : LexerBase() {
     }
 
     companion object {
-        /** `ThingTemplateLoader.MODULE_FIELDS`: inside an `Object` these open a module sub-block. */
+        /** `ThingTemplateLoader.MODULE_FIELDS`: inside any template block these open a module sub-block. */
         val MODULE_FIELDS = listOf("Body", "Behavior", "Update", "Draw", "ClientUpdate")
 
         private const val LINE_START = 0

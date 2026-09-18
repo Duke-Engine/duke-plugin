@@ -10,7 +10,7 @@
             <li>Highlighting for block headers, <code>End</code>, keys, values, numbers, strings and <code>;</code> comments</li>
             <li>Folding for <code>Object ... End</code> blocks and their module sub-blocks</li>
             <li>Structure view listing every block and the modules inside each <code>Object</code></li>
-            <li>Checks for unclosed blocks, stray <code>End</code> lines, unrecognized lines and keys set twice in one block</li>
+            <li>Checks for unclosed blocks, stray <code>End</code> lines and unrecognized lines</li>
             <li>Ctrl+Click from a block name used elsewhere, such as the hero a <code>DungeonSkill</code> belongs to, to its definition</li>
             <li>Module names and module fields completed and checked against the engine's <code>Module</code> classes
                 on the project classpath; Ctrl+Click from a module name to its class</li>
@@ -18,6 +18,10 @@
                 with a quick fix</li>
             <li>Asset paths (<code>Model = models/heroes/rogue.glb</code>, <code>Icon = skill_arrow_shot.png</code>)
                 completed from the resource root, checked there with exact letter case, and opened by Ctrl+Click</li>
+            <li>Duke Inspector tool window: the selected INI file as a form, with a checkbox, a list of files,
+                block names or animation clips, or a text field for each field, modules added by group, and
+                the blocks a unit is missing offered in one click</li>
+            <li>File &gt; New &gt; Duke Unit: an empty unit or a renamed copy, added to the game's list of files</li>
         </ul>
         Block types and the fields of blocks other than modules are not checked.
         ]]></description>
@@ -51,5 +55,19 @@
                          bundle="messages.DukeBundle" key="inspection.registration.name" groupKey="inspection.group"
                          enabledByDefault="true" level="WARNING"
                          implementationClass="uz.duke.plugin.engine.DukeModuleRegistrationInspection"/>
+        <toolWindow id="Duke Inspector" anchor="right" icon="AllIcons.Toolwindows.ToolWindowStructure"
+                    factoryClass="uz.duke.plugin.inspector.DukeInspectorFactory"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="uz.duke.plugin.inspector.DukeInspectorOpener"
+                  topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </projectListeners>
+
+    <actions>
+        <action id="Duke.NewUnit" class="uz.duke.plugin.inspector.DukeNewUnitAction" text="Duke Unit…"
+                description="Create a unit's INI file and add it to the game's list of files" icon="AllIcons.Nodes.Class">
+            <add-to-group group-id="NewGroup" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

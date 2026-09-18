@@ -14,14 +14,16 @@ lines it checks against the engine's Java classes on the project classpath.
 Every `*.ini` file opens as **Duke INI** and gets:
 
 - **Highlighting** for block types, `End`, keys, module names, values, numbers, strings and `;` comments.
-- **Folding** of each block and each module sub-block down to its first line.
-- **Structure view** (Alt+7) listing every block, with an `Object`'s modules under it.
+- **Sections inside a block**, as a game's `World` block holds them: `Generation = Layout`, its fields, and an
+  `End` of its own. Which keys open a section is the game's code, which the editor cannot see while it reads
+  the text, so it goes by the layout: a `Key = Name` line with lines indented under it, or with its `End` at its
+  own indent, opens one. A field whose next line is indented deeper by mistake reads as a section.
+- **Folding** of each block, module and section down to its first line.
+- **Structure view** (Alt+7) listing every block, with its modules and sections under it.
 - **Checks:**
   - error on a block with no `End`, and on an `End` with no open block;
-  - warning on a line that is neither a header nor `Key = value`, and on a key set twice in one block.
-    A repeated key counts as a list, and is not flagged, when another block of the same type in the file
-    repeats it too (`Kind` in `DungeonEffect`), when it runs three or more lines in a row, or when it
-    comes once after each such list key (`HeldRoll` after each `Holds`).
+  - warning on a line that is neither a header nor `Key = value`.
+  - A key set more than once in a block is not flagged: many fields are lists (`Kind`, `Holds`, `File`).
   - Outside module blocks, field names are not checked: `fsdgge = 345` is valid syntax there. The engine
     rejects it when it loads the file.
 - **Navigation:** Ctrl+Click a name used elsewhere to reach its definition, e.g. `Rogue` in `DungeonSkill Rogue Q`
@@ -71,6 +73,37 @@ path when it ends in a model, image, sound or font extension (`.glb .gltf .obj .
   the check flags them instead.
 
 Outside a resource root (a loose file, an unexpected layout) asset paths are not checked or completed.
+
+### Duke Inspector
+
+A tool window on the right that opens the first time an INI file is selected, and shows that file as a form.
+The file stays the truth: every change is written into it as text (Ctrl+Z undoes it, comments stay), and the
+form is read again from the file.
+
+- **Sections:** each block folds open; each module of a unit, and each section of a block (`Generation = Layout`
+  in `World Dungeon`), is a group of its own inside it. The block the caret is in opens and scrolls into view.
+- **Editors by what a field is:** a checkbox for `Yes`/`No`, a list for an enum, a list of files of the right
+  kind for an asset path, a list of block names for a field that names a block (`Look = ArcherShot` lists the
+  `DungeonEffect`s), a list of clips for an animation (`Attack = Melee_Attack`, read from the models'
+  headers), and a text field otherwise. A number field takes only a number.
+- **Adding:** `+ Field` lists the fields the block's code reads that it does not write yet, and the sections it
+  may hold, written with their own `End` and the fields such sections usually have; `+ Module` lists
+  the engine's modules by `@ModuleGroup`, written under the key files use for it and with the fields most
+  files give it. Add Block (toolbar) adds any block type the game reads.
+- **Add to this unit:** what units like this one have and it does not — a hero's portrait, a skill, a sound
+  for each moment (`DungeonSound hurt.Goblin`) — one click each, with the fields such blocks usually have.
+  **In other files** lists the unit's blocks that live elsewhere, as links.
+- **New unit** (toolbar, or File > New > Duke Unit): a name, and either an empty unit with the blocks chosen
+  or a copy of a unit renamed (headers, `Script:<Name>Brain`, `DisplayName`). The file goes beside the units
+  like it and is added to the game's list of files (`DungeonContent`), after the others in its folder.
+
+Nothing in it names a game. Block types and fields are read from the game's code: every
+`initFromIni(x, TABLE)` and `TABLE`'s `add("Field", Ini.real(...))`, a section wherever a field's parser reads a table
+of its own to `End` (`add("Generation", Ini.section(LAYOUT))`), and every template block a game registers
+with `loader.type("Monster", Monster.class, ...)`, which takes the engine fields of the capabilities its record
+implements (`Solid` → `Geometry…`, `Sighted` → `VisionRange`). What a field names, which blocks a unit usually
+has and what a new block starts with are read from the INI files themselves. A unit is any block that carries
+modules — `Object`, or a game's `Monster` — and `Body =`, `Update =` and the rest open a module in any of them.
 
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests:
 `./gradlew test`. They also check that every file in `dungeon/src/main/resources/ini` loads with no problems.

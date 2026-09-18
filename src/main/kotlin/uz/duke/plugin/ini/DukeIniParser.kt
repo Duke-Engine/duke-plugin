@@ -13,7 +13,7 @@ import uz.duke.plugin.ini.DukeIniTypes as T
 
 /**
  * One pass over lines: the lexer already said what each line is, so the parser only
- * groups them — a block is its header line, its fields and modules, and its End.
+ * groups them — a block is its header line, its fields, modules and sections, and its End.
  * A block that meets the next header (or the end of file) first is left without an
  * End, which is how the annotator knows it is unclosed.
  */
@@ -55,6 +55,12 @@ class DukeIniParser : PsiParser {
                     line(b) { if (it == T.MODULE_NAME) T.MODULE_NAME_ELEMENT else null }
                     body(b)
                     module.done(T.MODULE_ELEMENT)
+                }
+                T.SECTION_KEY -> {
+                    val section = b.mark()
+                    line(b) { if (it == T.NAME) T.NAME_ELEMENT else null }
+                    body(b)
+                    section.done(T.SECTION_ELEMENT)
                 }
                 T.KEY -> {
                     val field = b.mark()
@@ -101,6 +107,7 @@ class DukeIniParserDefinition : ParserDefinition {
     override fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
         T.BLOCK_ELEMENT -> DukeIniBlock(node)
         T.MODULE_ELEMENT -> DukeIniModule(node)
+        T.SECTION_ELEMENT -> DukeIniSubsection(node)
         T.MODULE_NAME_ELEMENT -> DukeIniModuleName(node)
         T.HEADER_ELEMENT -> DukeIniHeader(node)
         T.FIELD_ELEMENT -> DukeIniField(node)
