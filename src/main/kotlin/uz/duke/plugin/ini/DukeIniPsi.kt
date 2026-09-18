@@ -137,13 +137,26 @@ class DukeIniField(node: ASTNode) : ASTWrapperPsiElement(node) {
     /** Lower case: the engine looks fields up case-insensitively. */
     val key: String
         get() = keyText.lowercase()
+
+    /** `ui/click_2.ogg` in `File = ui/click_2.ogg`: the value as a word, when it is one. */
+    val valueWord: DukeIniWord?
+        get() = PsiTreeUtil.getChildOfType(this, DukeIniWord::class.java)
+
+    /** The first value on the line, number or word: `30` in `FigureIcon = 30`. */
+    val valueText: String?
+        get() = node.findChildByType(VALUES)?.text
+
+    private companion object {
+        val VALUES = TokenSet.create(T.VALUE_ELEMENT, T.NUMBER, T.STRING)
+    }
 }
 
 class DukeIniBadLine(node: ASTNode) : ASTWrapperPsiElement(node)
 
-/** A block name in a header or a field value; either may name another block. */
+/** A block name in a header or a field value; either may name another block, and a value may name an asset. */
 class DukeIniWord(node: ASTNode) : ASTWrapperPsiElement(node) {
     override fun getReferences(): Array<PsiReference> {
+        if (DukeAssets.isPath(this)) return arrayOf(DukeAssetReference(this))
         val header = parent as? DukeIniHeader
         return if (header == null || header.names.size > 1) arrayOf<PsiReference>(DukeIniReference(this)) else PsiReference.EMPTY_ARRAY
     }

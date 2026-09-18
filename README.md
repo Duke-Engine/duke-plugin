@@ -51,6 +51,27 @@ file or the classpath changes, so a new module shows up as soon as its class exi
 Without the engine on the classpath, module lines are not checked and completion says
 `Duke Engine not found on classpath`; everything else works as before.
 
+### Assets
+
+Every asset is written as its whole path from the resource root the INI file sits in
+(`dungeon/src/main/resources`, the classpath root jME loads from): `Model = models/heroes/rogue.glb`,
+`Icon = icons/skills/skill_arrow_shot.png`. No folder is put in front of a name, so a game may keep its files
+in whatever structure it likes. Paths are read from disk; the engine is never started. A value is an asset
+path when it ends in a model, image, sound or font extension (`.glb .gltf .obj .j3o`,
+`.png .jpg .jpeg .tga .dds`, `.ogg .wav .mp3`, `.fnt`).
+
+- **Completion** after an asset key: every file under the root of the kind that key takes, as a whole path.
+  `Model` takes models, `Texture`/`Image`/`Icon` images, `Sound` sounds, `Font` fonts; other keys take the
+  kind their other values have. Typing the file name finds it wherever it sits. Files are listed from disk
+  each time, so a new asset shows up at once. `Icon = flask` and `FigureIcon = 30` are not paths, and get none.
+- **Checks:** error on a path with no file behind it, letter case included (`Models/` is not `models/`, as
+  on Linux CI), with `Did you mean …?` and a quick fix when a close match exists; warning on a file of the
+  wrong kind (`Model = x.png`).
+- **Navigation:** Ctrl+Click a path to open the file. Renaming or moving an asset does not update INI lines;
+  the check flags them instead.
+
+Outside a resource root (a loose file, an unexpected layout) asset paths are not checked or completed.
+
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests:
 `./gradlew test`. They also check that every file in `dungeon/src/main/resources/ini` loads with no problems.
 

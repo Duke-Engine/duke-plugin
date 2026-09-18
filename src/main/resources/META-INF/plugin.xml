@@ -16,6 +16,8 @@
                 on the project classpath; Ctrl+Click from a module name to its class</li>
             <li>A warning where <code>ModuleFactory.register</code> gives a module a name other than its class name,
                 with a quick fix</li>
+            <li>Asset paths (<code>Model = models/heroes/rogue.glb</code>, <code>Icon = skill_arrow_shot.png</code>)
+                completed from the resource root, checked there with exact letter case, and opened by Ctrl+Click</li>
         </ul>
         Block types and the fields of blocks other than modules are not checked.
         ]]></description>
@@ -41,6 +43,10 @@
         <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeModuleAnnotator"/>
         <completion.contributor language="DukeIni"
                                 implementationClass="uz.duke.plugin.ini.DukeModuleCompletionContributor"/>
+        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeAssetAnnotator"/>
+        <completion.contributor language="DukeIni"
+                                implementationClass="uz.duke.plugin.ini.DukeAssetCompletionContributor"/>
+        <typedHandler implementation="uz.duke.plugin.ini.DukeIniTypedHandler"/>
         <localInspection language="JAVA" shortName="DukeModuleRegistration"
                          bundle="messages.DukeBundle" key="inspection.registration.name" groupKey="inspection.group"
                          enabledByDefault="true" level="WARNING"

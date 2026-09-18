@@ -58,10 +58,6 @@ class DukeModuleCompletionContributor : CompletionContributor() {
         })
     }
 
-    /** The space after `Update =` opens the module list. */
-    override fun invokeAutoPopup(position: PsiElement, typeChar: Char) =
-        typeChar == ' ' && position.node.elementType == T.EQ && position.parent is DukeIniModule
-
     override fun handleEmptyLookup(parameters: CompletionParameters, editor: Editor): String? {
         val inModule = PsiTreeUtil.getParentOfType(parameters.position, DukeIniModule::class.java) != null
         return if (inModule && DukeModules.of(parameters.originalFile) == null) DukeBundle.message("engine.not.found") else null
