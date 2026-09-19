@@ -18,6 +18,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiType
@@ -47,9 +48,9 @@ class DukeSyntaxHighlighter : SyntaxHighlighterBase() {
         val BAD = createTextAttributesKey("DUKE_BAD", HighlighterColors.BAD_CHARACTER)
 
         private val COLORS = mapOf(
-            T.WORD to WORD, T.END to KEYWORD, T.KEY to KEY, T.VALUE to VALUE, T.NUMBER to NUMBER, T.STRING to STRING,
-            T.EQ to EQ, T.LBRACKET to BRACKETS, T.RBRACKET to BRACKETS, T.COMMA to COMMA, T.COMMENT to COMMENT,
-            T.BAD to BAD, T.BAD_LINE to BAD,
+            T.WORD to WORD, T.TYPE to WORD, T.END to KEYWORD, T.KEY to KEY, T.VALUE to VALUE, T.NUMBER to NUMBER,
+            T.STRING to STRING, T.EQ to EQ, T.LBRACKET to BRACKETS, T.RBRACKET to BRACKETS, T.LIST_END to BRACKETS,
+            T.COMMA to COMMA, T.COMMENT to COMMENT, T.BAD to BAD, T.BAD_LINE to BAD,
         )
     }
 }
@@ -88,6 +89,10 @@ class DukeAnnotator : Annotator, DumbAware {
     }
 
     private fun list(list: DukeList, holder: AnnotationHolder) {
+        if (list.holdsBlocks) {
+            if (!list.isClosed) holder.error(list.firstChild, "duke.block.list.open", (list.parent as? DukeField)?.key.orEmpty())
+            return
+        }
         if (!list.isClosed) holder.error(list.firstChild, "duke.list.open")
         // Between items a comma, and an item between commas; a trailing comma closes nothing.
         var previous: PsiElement? = null
@@ -101,6 +106,15 @@ class DukeAnnotator : Annotator, DumbAware {
     }
 
     private fun badLine(line: DukeBadLine, holder: AnnotationHolder) {
+        val list = line.parent as? DukeList
+        if (list != null) {
+            holder.error(line, "duke.block.list.item", (list.parent as? DukeField)?.key.orEmpty(), line.text)
+            return
+        }
+        if (line.text == "]") {
+            holder.error(line, "duke.stray.list.end")
+            return
+        }
         val named = NAMED_HEADER.matchEntire(line.text)
         if (named == null) {
             holder.error(line, "duke.bad.line")
@@ -149,20 +163,30 @@ class DukeEngineAnnotator : Annotator {
 
     private fun word(word: DukeWord, holder: AnnotationHolder) {
         val block = word.block
-        val container = block.container
-        when (val shape = DukeRecords.shapeOf(block)) {
-            is DukeShape.Record -> {
-                // A component that holds one block, written twice.
-                val component = shape.component ?: return
-                if (container == null || DukeRecords.isCollection(component.type)) return
-                val first = container.blocks.first { (DukeRecords.shapeOf(it) as? DukeShape.Record)?.component?.name == component.name }
-                if (first != block) holder.error(word, "duke.block.twice", word.text, container.wordText)
+        val owner = block.owner
+        val shape = DukeRecords.shapeOf(block)
+        if (owner == null) {
+            if (shape == null && engineFound(word)) holder.error(word, "duke.unknown.block", word.text)
+            return
+        }
+        val field = block.owningField
+        if (field != null) {
+            // The record after `Key =`, or an item of its list: one the field may be.
+            if (shape != null) return
+            val record = DukeRecords.recordOf(owner) ?: return
+            val type = DukeRecords.component(record, field.key)?.type?.let(DukeRecords::blockClass) ?: return
+            if (!DukeRecords.isChoosable(type)) return
+            holder.plain(word, notOneOf(type, field.key, word.text, word))
+            return
+        }
+        when (shape) {
+            is DukeShape.Entries -> {
+                val first = owner.blocks.first { it.wordText.equals(block.wordText, ignoreCase = true) }
+                if (first != block) holder.error(word, "duke.block.twice", word.text, owner.wordText)
             }
-            is DukeShape.Entries -> {}
-            null -> when {
-                container == null -> if (engineFound(word)) holder.error(word, "duke.unknown.block", word.text)
-                DukeRecords.shapeOf(container) is DukeShape.Entries -> holder.error(word, "duke.entries.not.blocks", container.wordText)
-                DukeRecords.recordOf(container) != null -> holder.error(word, "duke.holds.no.block", container.wordText, word.text)
+            else -> when {
+                DukeRecords.shapeOf(owner) is DukeShape.Entries -> holder.error(word, "duke.entries.not.blocks", owner.wordText)
+                else -> DukeRecords.recordOf(owner)?.let { holder.plain(word, DukeRecords.misplaced(it, owner.wordText, word.text, word)) }
             }
         }
     }
@@ -189,22 +213,36 @@ class DukeEngineAnnotator : Annotator {
     private fun value(field: DukeField, type: PsiType, holder: AnnotationHolder) {
         val key = field.key
         val list = field.list
-        if (DukeRecords.isCollection(type)) {
-            if (list == null) {
-                field.value?.let { holder.error(it, "duke.is.list", key) }
-                return
-            }
-            val element = DukeRecords.elementOf(type) ?: return
-            for (item in list.items) DukeRecords.problemOf(item.unquoted, element, key)?.let { holder.plain(item, it) }
+        val at: PsiElement = field.nested?.word ?: list ?: field.value ?: field.keyElement
+        if (DukeRecords.isMap(type)) {
+            holder.error(at, "duke.is.map", key)
             return
         }
-        val record = DukeRecords.classOf(type)?.takeIf { it.isRecord }
+        if (DukeRecords.isCollection(type)) {
+            val blocks = DukeRecords.isChoosable(DukeRecords.blockClass(type))
+            when {
+                list == null -> holder.error(at, if (blocks) "duke.is.block.list" else "duke.is.list", key)
+                list.holdsBlocks && !blocks -> holder.error(list.firstChild, "duke.is.list", key)
+                !list.holdsBlocks && blocks -> holder.error(list, "duke.is.block.list", key)
+                !list.holdsBlocks -> {
+                    val element = DukeRecords.elementOf(type) ?: return
+                    for (item in list.items) DukeRecords.problemOf(item.unquoted, element, key)?.let { holder.plain(item, it) }
+                }
+            }
+            return
+        }
+        val cls = DukeRecords.classOf(type)
+        val choosable = DukeRecords.isChoosable(cls)
+        if (field.nested != null) {
+            if (!choosable) holder.error(at, "duke.is.value", key)
+            return
+        }
         if (list != null) {
-            if (record == null) {
+            if (list.holdsBlocks || cls == null || !cls.isRecord) {
                 holder.error(list, "duke.not.list", key)
                 return
             }
-            val components = record.recordComponents
+            val components = cls.recordComponents
             if (components.size != list.items.size) {
                 holder.error(list, "duke.list.size", key, components.size, list.items.size)
                 return
@@ -215,9 +253,16 @@ class DukeEngineAnnotator : Annotator {
             return
         }
         val value = field.value
+        if (choosable && cls != null && value != null) {
+            if (DukeRecords.accepting(cls, value.unquoted, value) == null) holder.plain(value, notOneOf(cls, key, value.unquoted, value))
+            return
+        }
         val problem = DukeRecords.problemOf(value?.unquoted.orEmpty(), type, key) ?: return
         holder.plain(value ?: field.keyElement, problem)
     }
+
+    private fun notOneOf(type: PsiClass, key: String, word: String, context: PsiElement) =
+        "'$key' is one of ${DukeRecords.choices(type, context).map { it.first }}, not '$word'"
 
     private fun engineFound(context: PsiElement) =
         JavaPsiFacade.getInstance(context.project).findClass(BINDER_CLASS, context.resolveScope) != null

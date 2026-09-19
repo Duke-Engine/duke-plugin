@@ -35,7 +35,7 @@ class DukeStructureViewFactory : PsiStructureViewFactory {
         }
 }
 
-/** Blocks, and under each the blocks it holds: `Monster Brute`, then its `Cylinder`, its modules, its `Skill`s. */
+/** Blocks, and under each the blocks it holds: `Monster Brute`, then `Geometry = Cylinder`, its modules, its `Skill`s. */
 class DukeStructureViewModel(file: PsiFile, editor: Editor?) :
     StructureViewModelBase(file, editor, DukeStructureElement(file)), StructureViewModel.ElementInfoProvider {
 
@@ -45,7 +45,7 @@ class DukeStructureViewModel(file: PsiFile, editor: Editor?) :
 
     override fun getSorters(): Array<Sorter> = arrayOf(Sorter.ALPHA_SORTER)
     override fun isAlwaysShowsPlus(element: StructureViewTreeElement) = false
-    override fun isAlwaysLeaf(element: StructureViewTreeElement) = (element.value as? DukeBlock)?.blocks?.isEmpty() == true
+    override fun isAlwaysLeaf(element: StructureViewTreeElement) = (element.value as? DukeBlock)?.parts?.isEmpty() == true
 }
 
 class DukeStructureElement(private val element: NavigatablePsiElement) : StructureViewTreeElement, SortableTreeElement {
@@ -62,7 +62,7 @@ class DukeStructureElement(private val element: NavigatablePsiElement) : Structu
     override fun getChildren(): Array<TreeElement> {
         val children = when (element) {
             is DukeFile -> element.blocks
-            is DukeBlock -> element.blocks
+            is DukeBlock -> element.parts
             else -> emptyList()
         }
         return children.map { DukeStructureElement(it) }.toTypedArray<TreeElement>()
@@ -83,7 +83,7 @@ class DukeFoldingBuilder : FoldingBuilderEx(), DumbAware {
         return (blocks + lists).toTypedArray()
     }
 
-    override fun getPlaceholderText(node: ASTNode) = if (node.elementType == T.LIST) "[...]" else "..."
+    override fun getPlaceholderText(node: ASTNode) = if (node.elementType == T.LIST || node.elementType == T.BLOCK_LIST) "[...]" else "..."
     override fun isCollapsedByDefault(node: ASTNode) = false
 }
 

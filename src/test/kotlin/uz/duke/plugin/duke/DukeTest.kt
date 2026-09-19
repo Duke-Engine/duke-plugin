@@ -1,5 +1,6 @@
 package uz.duke.plugin.duke
 
+import com.intellij.codeInsight.lookup.Lookup
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiRecordComponent
@@ -28,6 +29,17 @@ class DukeSyntaxTest : BasePlatformTestCase() {
             |  <error descr="Expected a block's word, 'Key = value' or End">42 = x</error>
             |  Empty = []
             |  Spaced = Skeleton Mage
+            |  Modules = [
+            |    Bow
+            |    End
+            |    <error descr="'Modules' is a list of blocks, each closed by End, and ends with ']' on a line of its own, not 'Speed = 1'">Speed = 1</error>
+            |  ]
+            |  <error descr="']' with no list of blocks open">]</error>
+            |End
+            |Unit
+            |  Modules = <error descr="'Modules = [' is never closed by ']'">[</error>
+            |    Bow
+            |    End
             |End
             |<error descr="End with no block open">End</error>
             |<error descr="'Open' has no End">Open</error>
@@ -38,9 +50,42 @@ class DukeSyntaxTest : BasePlatformTestCase() {
     }
 
     fun testANamedHeaderIsFixedByMovingTheNameInside() {
-        myFixture.configureByText("unit.duke", "Monster\n  <caret>Cylinder Big\n    Radius = 4\n  End\nEnd\n")
+        myFixture.configureByText("unit.duke", "Monster\n  <caret>Portrait Big\n    Yaw = 4\n  End\nEnd\n")
         myFixture.launchAction(myFixture.findSingleIntention("Move the name inside the block"))
-        myFixture.checkResult("Monster\n  Cylinder\n    Name = Big\n    Radius = 4\n  End\nEnd\n")
+        myFixture.checkResult("Monster\n  Portrait\n    Name = Big\n    Yaw = 4\n  End\nEnd\n")
+    }
+
+    /** A word after `=` is a record with a body only when the lines under it are deeper; a lone `[` holds blocks only when they follow. */
+    fun testWhatTheLinesUnderAFieldMakeIt() {
+        myFixture.configureByText(
+            "units.duke",
+            """
+            |Monster
+            |  Geometry = Cylinder
+            |    Radius = 3
+            |  End
+            |  Look = Fire
+            |  Modules = [
+            |    Bow
+            |    End
+            |    MoveUpdate
+            |      Speed = 4
+            |    End
+            |  ]
+            |  Kinds = [
+            |    TRAIL,
+            |    GLOW
+            |  ]
+            |End
+            """.trimMargin(),
+        )
+        assertEmpty(myFixture.doHighlighting())
+        val monster = (myFixture.file as DukeFile).blocks.single()
+        assertEquals("Cylinder", monster.field("Geometry")!!.nested!!.wordText)
+        assertEquals("Fire", monster.field("Look")!!.valueText)
+        assertEquals(listOf("Bow", "MoveUpdate"), monster.field("Modules")!!.blocks.map { it.wordText })
+        assertEquals(listOf("TRAIL", "GLOW"), monster.field("Kinds")!!.values.map { it.unquoted })
+        assertEquals(listOf("Speed"), monster.field("Modules")!!.blocks[1].fields.map { it.key })
     }
 
     fun testAListOverSeveralLinesIsOneValue() {
@@ -58,11 +103,13 @@ class DukeSyntaxTest : BasePlatformTestCase() {
             """
             |Monster
             |  Name = Brute
-            |  Cylinder
+            |  Geometry = Cylinder
             |    Radius = 4
             |  End
-            |  MoveUpdate
-            |  End
+            |  Modules = [
+            |    MoveUpdate
+            |    End
+            |  ]
             |End
             |Effect
             |  Name = Fire
@@ -76,7 +123,7 @@ class DukeSyntaxTest : BasePlatformTestCase() {
                 """
                 |-units.duke
                 | -Monster Brute
-                |  Cylinder
+                |  Geometry = Cylinder
                 |  MoveUpdate
                 | Effect Fire
                 |""".trimMargin(),
@@ -110,18 +157,26 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
             |  SkillDistance = <error descr="'SkillDistance' takes 2 values, not 3">[1, 2, 3]</error>
             |  Kinds = <error descr="'Kinds' is a list: write it [a, b]">a</error>
             |  Name2 = <error descr="'Name2' takes one value, not a list">[a]</error>
-            |  Cylinder
+            |  Geometry = Cylinder
             |    Radius = <error descr="'Radius' is a number, not 'x'">x</error>
             |  End
-            |  <error descr="'Sphere' is written twice in 'Monster'">Sphere</error>
-            |  End
+            |  Skills = <error descr="'Skills' is a list of blocks: 'Skills = [', a block for each, then ']'">Skill</error>
+            |  Modules = [
+            |    <error descr="'Modules' is one of [MoveUpdate], not 'Wheel'">Wheel</error>
+            |    End
+            |  ]
             |  Armor
             |    <error descr="'ARMOR' is one of [FIRE, ICE], not 'ARMOR'">ARMOR</error> = 1
             |    <error descr="'Armor' holds entries, not blocks">Plate</error>
             |    End
             |  End
-            |  <error descr="'Monster' holds no block 'Wheel'">Wheel</error>
+            |  <error descr="'Cylinder' is the value of its field: Geometry = Cylinder">Cylinder</error>
             |  End
+            |  <error descr="'MoveUpdate' goes in its list: 'Modules = [', then MoveUpdate … End, then ']'">MoveUpdate</error>
+            |  End
+            |End
+            |Object
+            |  Geometry = <error descr="'Geometry' is one of [Sphere, Cylinder], not 'Cone'">Cone</error>
             |End
             |<error descr="No record is called 'Beast'">Beast</error>
             |End
@@ -133,15 +188,18 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
     fun testAWordOpensTheClassItIsReadAs() {
         assertEquals("game.Monster", classAt("Mon<caret>ster\nEnd\n"))
         assertEquals("game.Unit", classAt("Obj<caret>ect\nEnd\n")) // the game's registration, not the loader's own
-        assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Move<caret>Update\n  End\nEnd\n"))
-        assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Cyl<caret>inder\n  End\nEnd\n"))
-        assertEquals("game.Skill", classAt("Monster\n  Sk<caret>ill\n  End\nEnd\n"))
+        assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Modules = [\n    Move<caret>Update\n    End\n  ]\nEnd\n"))
+        assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Geometry = Cyl<caret>inder\n    Radius = 1\n  End\nEnd\n"))
+        assertEquals("uz.duke.core.thing.Geometry.Sphere", classAt("Monster\n  Geometry = Sph<caret>ere\nEnd\n"))
+        assertEquals("game.Skill", classAt("Monster\n  Skills = [\n    Sk<caret>ill\n    End\n  ]\nEnd\n"))
         myFixture.configureByText("u.duke", "Monster\n  Ar<caret>mor\n  End\nEnd\n")
         assertEquals("armor", (myFixture.elementAtCaret as PsiRecordComponent).name)
+        myFixture.configureByText("u.duke", "Monster\n  Geo<caret>metry = Sphere\nEnd\n")
+        assertEquals("geometry", (myFixture.elementAtCaret as PsiRecordComponent).name)
     }
 
     fun testAKeyOpensItsComponentAndAValueItsConstant() {
-        myFixture.configureByText("u.duke", "Monster\n  MoveUpdate\n    Sp<caret>eed = 1\n  End\nEnd\n")
+        myFixture.configureByText("u.duke", "Monster\n  Modules = [\n    MoveUpdate\n      Sp<caret>eed = 1\n    End\n  ]\nEnd\n")
         val speed = myFixture.elementAtCaret as PsiRecordComponent
         assertEquals("speed", speed.name)
         assertEquals("Data", speed.containingClass?.name)
@@ -151,12 +209,19 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
         assertEquals("FIRE", (myFixture.elementAtCaret as PsiEnumConstant).name)
     }
 
-    fun testALineBeingBegunIsOfferedTheKeysAndBlocksLeft() {
+    fun testALineBeingBegunIsOfferedTheKeysAndMapsLeft() {
         myFixture.configureByText("u.duke", "Monster\n  Name = Brute\n  <caret>\nEnd\n")
         myFixture.completeBasic()
         val offered = myFixture.lookupElementStrings!!
-        assertContainsElements(offered, "SenseRadius", "Flies", "Effect", "SkillDistance", "Kinds", "Sphere", "Cylinder", "MoveUpdate", "Skill", "Armor")
-        assertDoesntContain(offered, "Name", "Skills", "Modules", "Geometry")
+        assertContainsElements(offered, "SenseRadius", "Flies", "Effect", "SkillDistance", "Kinds", "Geometry", "Modules", "Skills", "Armor")
+        assertDoesntContain(offered, "Name", "Cylinder", "MoveUpdate", "Skill")
+    }
+
+    fun testAListOfBlocksIsOfferedTheRecordsItHolds() {
+        myFixture.configureByText("u.duke", "Monster\n  Modules = [\n    <caret>\n  ]\nEnd\n")
+        assertEquals(listOf("MoveUpdate"), myFixture.completeBasic().map { it.lookupString })
+        myFixture.finishLookup(Lookup.NORMAL_SELECT_CHAR)
+        myFixture.checkResult("Monster\n  Modules = [\n    MoveUpdate\n      <caret>\n    End\n  ]\nEnd\n")
     }
 
     fun testAfterTheEqualsSignTheValuesItsTypeTakes() {
@@ -166,6 +231,9 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
         myFixture.configureByText("u.duke", "Monster\n  Flies = <caret>\nEnd\n")
         myFixture.completeBasic()
         assertSameElements(myFixture.lookupElementStrings!!, "Yes", "No")
+        myFixture.configureByText("u.duke", "Monster\n  Geometry = <caret>\nEnd\n")
+        myFixture.completeBasic()
+        assertSameElements(myFixture.lookupElementStrings!!, "Sphere", "Cylinder")
     }
 
     fun testAKeyIsCompletedWithItsEqualsSign() {
@@ -179,9 +247,7 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
         myFixture.renameElement(myFixture.findClass("game.Monster").recordComponents.first { it.name == "senseRadius" }, "sightRadius")
         myFixture.renameElement(myFixture.findClass("uz.duke.core.module.MoveUpdate"), "Mover")
         assertTrue(data.text, data.text.contains("\n  SightRadius = 90\n"))
-        assertTrue(data.text, data.text.contains("\n  Mover\n    Speed = 10\n"))
-        // Portrait-style words name a component, not the class they open: renaming the class leaves them.
-        assertTrue(data.text, data.text.contains("\n  Cylinder\n"))
+        assertTrue(data.text, data.text.contains("\n    Mover\n      Speed = 10\n"))
     }
 
     private fun classAt(text: String): String? {
@@ -200,21 +266,25 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
             |  Effect = STRIKE
             |  SkillDistance = [20, 60]
             |  Kinds = [a, "b, c"]
-            |  Cylinder
+            |  Geometry = Cylinder
             |    Radius = 4
             |    Height = 12
             |  End
-            |  MoveUpdate
-            |    Speed = 10
-            |    TurnRate = 0
-            |  End
-            |  Skill
-            |    Key = Q
-            |    Effect = heal
-            |  End
-            |  Skill
-            |    Key = W
-            |  End
+            |  Modules = [
+            |    MoveUpdate
+            |      Speed = 10
+            |      TurnRate = 0
+            |    End
+            |  ]
+            |  Skills = [
+            |    Skill
+            |      Key = Q
+            |      Effect = heal
+            |    End
+            |    Skill
+            |      Key = W
+            |    End
+            |  ]
             |  Armor
             |    FIRE = 0.5
             |  End
@@ -222,6 +292,7 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
             |Object
             |  Name = Tower
             |  BuildCost = 100
+            |  Geometry = Sphere
             |End
             |""".trimMargin()
     }

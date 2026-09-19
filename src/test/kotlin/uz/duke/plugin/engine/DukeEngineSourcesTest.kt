@@ -58,13 +58,15 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         assertEquals("uz.duke.dungeon.content.Monster", classAt("Mon<caret>ster\nEnd\n"))
         assertEquals("uz.duke.rts.RtsTemplate", classAt("Obj<caret>ect\nEnd\n"))
         assertEquals("uz.duke.dungeon.content.Effect", classAt("Eff<caret>ect\nEnd\n"))
-        assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Move<caret>Update\n  End\nEnd\n"))
-        assertEquals("uz.duke.game.script.ScriptModule", classAt("Monster\n  Script<caret>Module\n  End\nEnd\n"))
-        assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Cyl<caret>inder\n  End\nEnd\n"))
-        assertEquals("uz.duke.dungeon.skill.Skill", classAt("Monster\n  Sk<caret>ill\n  End\nEnd\n"))
-        assertEquals("uz.duke.dungeon.content.PortraitArt", classAt("Hero\n  Por<caret>trait\n  End\nEnd\n"))
+        assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Modules = [\n    Move<caret>Update\n    End\n  ]\nEnd\n"))
+        assertEquals("uz.duke.game.script.ScriptModule", classAt("Monster\n  Modules = [\n    Script<caret>Module\n    End\n  ]\nEnd\n"))
+        assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Geometry = Cyl<caret>inder\n    Radius = 1\n  End\nEnd\n"))
+        assertEquals("uz.duke.dungeon.skill.Skill", classAt("Monster\n  Skills = [\n    Sk<caret>ill\n    End\n  ]\nEnd\n"))
+        assertEquals("uz.duke.dungeon.content.PortraitArt", classAt("Hero\n  Portrait = Portrait<caret>Art\n    Yaw = 1\n  End\nEnd\n"))
 
-        myFixture.configureByText("u.duke", "Object\n  ActiveBody\n    Max<caret>Health = 1\n  End\nEnd\n")
+        myFixture.configureByText("u.duke", "Hero\n  Port<caret>rait = PortraitArt\n    Yaw = 1\n  End\nEnd\n")
+        assertEquals("portrait", (myFixture.elementAtCaret as PsiRecordComponent).name)
+        myFixture.configureByText("u.duke", "Object\n  Modules = [\n    ActiveBody\n      Max<caret>Health = 1\n    End\n  ]\nEnd\n")
         assertEquals("maxHealth", (myFixture.elementAtCaret as PsiRecordComponent).name)
     }
 

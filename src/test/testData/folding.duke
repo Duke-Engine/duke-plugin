@@ -1,9 +1,14 @@
 ; Units
 Monster<fold text='...'>
   Name = Brute
-  Cylinder<fold text='...'>
+  Geometry = Cylinder<fold text='...'>
     Radius = 4
   End</fold>
+  Modules = <fold text='[...]'>[
+    MoveUpdate<fold text='...'>
+      Speed = 10
+    End</fold>
+  ]</fold>
   Kinds = <fold text='[...]'>[
     A,
     B,

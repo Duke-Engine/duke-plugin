@@ -12,11 +12,13 @@
         <ul>
             <li>Highlighting for block words, <code>End</code>, keys, values, numbers, strings, <code>[a, b]</code> lists
                 and <code>;</code> comments; brace matching and line comments</li>
-            <li>Ctrl+Click from a block's word to the Java class it is read as — <code>Monster</code> to its record,
-                <code>MoveUpdate</code> to the module class, <code>Cylinder</code> to the shape — and from a key to the record
-                component it fills</li>
-            <li>Keys and blocks completed from the record the block is; enum constants, <code>Yes</code>/<code>No</code> and
-                asset paths completed after <code>=</code></li>
+            <li>Every line of a block names a field of its class: <code>Geometry = Cylinder</code> with its fields under it,
+                <code>Modules = [</code> a block for each <code>]</code>, <code>Armor</code> for a map</li>
+            <li>Ctrl+Click from a key to the record component it fills, and from a class — a block's word or the class after
+                <code>=</code> — to the Java class it is read as: <code>Monster</code> to its record, <code>MoveUpdate</code> to
+                the module class, <code>Cylinder</code> to the shape</li>
+            <li>Keys and maps completed from the record the block is; after <code>=</code>, the classes the field may be, enum
+                constants, <code>Yes</code>/<code>No</code> and asset paths; inside a list of records, the records it holds</li>
             <li>Checked as the engine reads them: an unknown block or key, a value its type cannot read, a list where one
                 value goes, a key written twice, a block with no <code>End</code> — each said in the engine's own words</li>
             <li>A header written <code>Monster Brute</code> is fixed to <code>Monster</code> with <code>Name = Brute</code> inside</li>

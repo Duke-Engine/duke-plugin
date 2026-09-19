@@ -13,42 +13,57 @@ game's own Java records, so the plugin knows no particular game.
 
 ### `.duke` files
 
-A `.duke` file is blocks: a line that is one word opens one, `End` closes the innermost, and each line inside is
-`Key = value`, a list `[a, b]` (over several lines if it likes), or a block of its own. The engine's `Binder`
-reads each block as the record its word names, each key as a component of that record; the plugin reads them
-the same way, from IntelliJ's Java model rather than by loading anything (the IDE runs on Java 21, the engine
-on 25).
+A `.duke` file is blocks: a line that is one word opens one, and `End` closes the innermost. The engine's
+`Binder` reads each block as the record its word names, and every line inside it as one of that record's
+components, by name — so every line starts with a field of the class:
+
+| The field is | It is written |
+|---|---|
+| a value | `Speed = 10` |
+| a list of values | `KindOf = [INFANTRY, CAN_ATTACK]`, over several lines if it likes |
+| one record | `Geometry = Cylinder`, its fields under it, `End` — the class after `=` |
+| a list of records | `Modules = [`, a block for each (`MoveUpdate` … `End`, no commas), `]` |
+| a map | `Armor`, its entries (`FLAME = 0.5`), `End` |
+
+`Key = Class` opens a block only when the next line is indented deeper; a record with nothing written in it is
+the word alone, `Geometry = Sphere`. The plugin reads the records the same way, from IntelliJ's Java model
+rather than by loading anything (the IDE runs on Java 21, the engine on 25).
 
 ```
 Monster
   Name = Brute
   KindOf = [INFANTRY, CAN_ATTACK]
-  Cylinder
+  Geometry = Cylinder
     Radius = 5
     Height = 14
   End
-  MoveUpdate
-    Speed = 22
-  End
+  Modules = [
+    MoveUpdate
+      Speed = 22
+    End
+  ]
 End
 ```
 
 - **Highlighting** for words, `End`, keys, values, numbers, strings, lists and `;` comments; brace matching
   for `[` `]`; Ctrl+/ comments a line.
-- **Navigation:** Ctrl+Click a block's word to open the class it is read as — `Monster` its record, `Object`
-  what the game's template loader registers (`RtsTemplate`), `MoveUpdate` the module's class, `Cylinder` the
-  shape of a `Geometry`, `Skill` the record a list of skills holds. Ctrl+Click a key to open the record
-  component it fills, and an enum value to its constant.
-- **Completion:** on a line being begun, the keys the block's record has not been given (written with ` = `)
-  and the blocks it may hold (written with their `End`); after `=`, an enum's constants, `Yes`/`No`, or files.
+- **Navigation:** Ctrl+Click a key to open the record component it is — `Geometry`, `Modules`, `Speed` — and a
+  class to the class: `Monster` its record, `Object` what the game's template loader registers (`RtsTemplate`),
+  `Cylinder` the shape of a `Geometry`, `MoveUpdate` the module's class, `Skill` the record a list of skills
+  holds. Ctrl+Click an enum value to its constant.
+- **Completion:** on a line being begun, the keys the record has not been given (written with ` = `) and its
+  maps; after `Key = `, the classes the field may be, an enum's constants, `Yes`/`No`, or files; inside a list of
+  records, the classes it holds, each written with its `End`.
 - **Checks**, each in the engine's own words, so what the editor says is what the game would say at load:
   - syntax, as `DukeText` reads it: a block with no `End`, an `End` with nothing open, a key written twice, a
-    list never closed, an empty item or a missing comma in a list, a line that fits nothing. A header written
-    the INI way, `Monster Brute`, has a quick fix: `Monster` with `Name = Brute` inside it.
-  - against the records, as `Binder` reads them: a word no block can be where it is, a key its record has no
-    component for, a value its component cannot read (a number, `Yes`/`No`, one of an enum's constants), a list
-    where one value goes and one value where a list goes, a positional record with the wrong number of values,
-    a block written twice where one is held.
+    list never closed, an empty item or a missing comma in a list, a line in a list of records that is not a
+    record, a line that fits nothing. A header written the INI way, `Monster Brute`, has a quick fix: `Monster`
+    with `Name = Brute` inside it.
+  - against the records, as `Binder` reads them: a key its record has no component for, a class the field may
+    not be, a value its component cannot read (a number, `Yes`/`No`, one of an enum's constants), a list where
+    one value goes and one value where a list goes, a positional record with the wrong number of values. A
+    block written on its own where a field should be says how it is written: `'Cylinder' is the value of its
+    field: Geometry = Cylinder`, `'MoveUpdate' goes in its list: 'Modules = [' …`.
   - Without the engine on the classpath only the syntax is checked.
 - **Refactoring:** renaming a module class, a record component (`senseRadius` → `SenseRadius` in the file) or
   an enum constant renames it in the data files.

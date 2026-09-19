@@ -53,11 +53,13 @@ sealed interface DukeShape {
  *
  * - A block at the top of a file is what a template loader registers under its word,
  *   `loader.type("Object", RtsTemplate.class)`, else the record of that name: `Monster`, `Effect`.
- * - A block inside another fills the component named after it, else the one whose type it names:
- *   a record of that name, one a sealed type permits (`Cylinder` for a `Geometry`), or a word of an
- *   open type — each record implementing it, by the name of the class it is written in, so
- *   `MoveUpdate` for `MoveUpdate.Data`, as `ModuleFactory.nameOf` names a module.
  * - A key is the record's component of that name, any case.
+ * - `Key = Class` with its fields under it, and each item of `Key = [ … ]`, is the record the class
+ *   names where that component holds it: the component's own record, one a sealed type permits
+ *   (`Cylinder` for a `Geometry`), or a word of an open type — each record implementing it, by the
+ *   name of the class it is written in, `MoveUpdate` for `MoveUpdate.Data`, as `ModuleFactory.nameOf`
+ *   names a module.
+ * - A block written on its own inside a record is one of its maps, named by its component.
  *
  * Nothing here names a game.
  */
@@ -79,10 +81,23 @@ object DukeRecords {
     fun recordOf(block: DukeBlock): PsiClass? = (shapeOf(block) as? DukeShape.Record)?.record
 
     private fun compute(block: DukeBlock): DukeShape? {
-        val container = block.container ?: return topLevel(block, block.wordText)
-        val holder = recordOf(container) ?: return null
-        return slot(holder, block.wordText, block)
+        val owner = block.owner ?: return topLevel(block, block.wordText)
+        val record = recordOf(owner) ?: return null
+        val field = block.owningField
+        if (field == null) {
+            // A block on its own inside a record is one of its maps, named by its field.
+            val component = component(record, block.wordText) ?: return null
+            return if (isMap(component.type)) DukeShape.Entries(component) else null
+        }
+        val component = component(record, field.key) ?: return null
+        val type = blockClass(component.type) ?: return null
+        val found = accepting(type, block.wordText, block) ?: return null
+        return DukeShape.Record(found, targetOf(found, type), component)
     }
+
+    /** What Ctrl+Click on a record's word opens: a module's class for a word of an open type, else the record. */
+    private fun targetOf(record: PsiClass, type: PsiClass): PsiElement =
+        record.containingClass?.takeIf { type.isInterface && !isSealed(type) } ?: record
 
     /** A block at the top of a file: what a loader registers under [word], else the record of that name. */
     fun topLevel(context: PsiElement, word: String): DukeShape? {
@@ -112,27 +127,47 @@ object DukeRecords {
             .groupBy({ it.first }, { it.second })
     }
 
-    /** Which of [record]'s components a block called [word] fills, as `Binder.slotFor` decides it. */
-    fun slot(record: PsiClass, word: String, context: PsiElement): DukeShape? {
-        // A block named after the component that holds it: Look for a MonsterLook look.
-        for (component in record.recordComponents) {
-            if (!component.name.equals(word, ignoreCase = true)) continue
-            if (isMap(component.type)) return DukeShape.Entries(component)
-            val type = blockClass(component.type)
-            if (type != null && type.isRecord) return DukeShape.Record(type, type, component)
+    /**
+     * Why a block written on its own inside [record] is not one of its maps, said as `Binder` says
+     * it: the files were written the other way first, so the way back is spelt out.
+     */
+    fun misplaced(record: PsiClass, holder: String, word: String, context: PsiElement): String {
+        component(record, word)?.let { component ->
+            val type = component.type
+            if (isCollection(type)) {
+                return if (isChoosable(blockClass(type))) "'$word' is a list of blocks: '$word = [', a block for each, then ']'"
+                else "'$word' is a list: write it $word = [a, b]"
+            }
+            val cls = classOf(type)
+            if (cls == null || !isChoosable(cls)) return "'$word' is a value: write it $word = …"
+            return "'$word' is written '$word = " + choices(cls, context).joinToString("' or '$word = ") { it.first } + "', its fields under it"
         }
-        // Else after what it is: a Generation, a Cylinder of a Geometry, a module.
         for (component in record.recordComponents) {
             if (isMap(component.type)) continue
             val type = blockClass(component.type) ?: continue
-            val found = accepting(type, word, context) ?: continue
-            return DukeShape.Record(found, found.containingClass?.takeIf { type.isInterface && !isSealed(type) } ?: found, component)
+            if (accepting(type, word, context) == null) continue
+            val key = capitalized(component.name)
+            return if (isCollection(component.type)) "'$word' goes in its list: '$key = [', then $word … End, then ']'"
+            else "'$word' is the value of its field: $key = $word"
         }
-        return null
+        return "'$holder' holds no block '$word'"
     }
 
-    /** The record a block called [word] is, where a component of [type] holds it: `Binder.accepting`. */
-    private fun accepting(type: PsiClass, word: String, context: PsiElement): PsiClass? {
+    /**
+     * Whether a type is written as a record named by its word — a record, a sealed type, an open type
+     * with records for words — rather than read from text, as a type with `of(String)` is.
+     */
+    fun isChoosable(type: PsiClass?): Boolean {
+        if (type == null || hasFactory(type)) return false
+        return type.isRecord || isSealed(type) || type.isInterface
+    }
+
+    private fun hasFactory(type: PsiClass) = listOf("of", "valueOf").any { name ->
+        type.findMethodsByName(name, false).any { it.hasModifierProperty(PsiModifier.STATIC) && it.parameterList.parametersCount == 1 }
+    }
+
+    /** The record written as [word] where [type] is held, or null: `Binder.accepting`. */
+    fun accepting(type: PsiClass, word: String, context: PsiElement): PsiClass? {
         if (type.isRecord) return type.takeIf { it.name.equals(word, ignoreCase = true) }
         if (isSealed(type)) return permitted(type, context.resolveScope).firstNotNullOfOrNull { accepting(it, word, context) }
         return if (type.isInterface) vocabulary(type, context)[word.lowercase()] else null
@@ -140,41 +175,29 @@ object DukeRecords {
 
     private fun isSealed(type: PsiClass) = type.hasModifierProperty(PsiModifier.SEALED)
 
-    /**
-     * Every word a block inside [record] may be, with what it opens: a record component by its own
-     * name, a list of records by the record's, and the words a sealed or open type is written as.
-     */
-    fun blockWords(record: PsiClass, context: PsiElement): Map<String, PsiElement> {
-        val words = LinkedHashMap<String, PsiElement>()
-        for (component in record.recordComponents) {
-            if (isMap(component.type)) {
-                words.putIfAbsent(capitalized(component.name), component)
-                continue
-            }
-            val type = blockClass(component.type) ?: continue
-            if (!isCollection(component.type) && type.isRecord) words.putIfAbsent(capitalized(component.name), type)
-            else accepted(type, context).forEach { (word, target) -> words.putIfAbsent(word, target) }
-        }
-        return words
-    }
-
-    private fun accepted(type: PsiClass, context: PsiElement): List<Pair<String, PsiElement>> = when {
+    /** The words a block of [type] may be written as, each with what it opens: the record's own, a sealed type's, an open type's. */
+    fun choices(type: PsiClass, context: PsiElement): List<Pair<String, PsiElement>> = when {
         type.isRecord -> listOf(type.name.orEmpty() to type)
-        type.hasModifierProperty(PsiModifier.SEALED) -> permitted(type, context.resolveScope).flatMap { accepted(it, context) }
-        type.isInterface -> vocabulary(type, context).values.map { nameOf(it) to (it.containingClass ?: it) }
+        // In the order they are written, as a sealed type's permits are; an open type's words in order of name.
+        isSealed(type) -> permitted(type, context.resolveScope).sortedWith(compareBy({ it.containingFile?.name }, { it.textOffset }))
+            .flatMap { choices(it, context) }
+        type.isInterface -> vocabulary(type, context).values.map { nameOf(it) to targetOf(it, type) }.sortedBy { it.first }
         else -> emptyList()
     }
+
+    /** The maps of [record], by the words their blocks are written with: the only blocks written on their own. */
+    fun mapWords(record: PsiClass): Map<String, PsiRecordComponent> =
+        record.recordComponents.filter { isMap(it.type) }.associateBy { capitalized(it.name) }
 
     /** The component [key] fills, any case. */
     fun component(record: PsiClass, key: String): PsiRecordComponent? =
         record.recordComponents.firstOrNull { it.name.equals(key, ignoreCase = true) }
 
-    /** Whether [component] can be written `Key = value`: a map or a list of blocks cannot. */
-    fun takesValue(component: PsiRecordComponent): Boolean {
-        if (isMap(component.type)) return false
-        val type = blockClass(component.type) ?: return true
-        return !type.isInterface && (!isCollection(component.type) || !type.isRecord)
-    }
+    /** Whether [component] is written `Key = …`: every one but a map, whose entries are a block of their own. */
+    fun takesValue(component: PsiRecordComponent): Boolean = !isMap(component.type)
+
+    /** The class a block written for [type] is: what a list holds, else the type's own. */
+    fun blockClass(type: PsiType): PsiClass? = classOf(if (isCollection(type)) elementOf(type) else type)
 
     /**
      * The words an open type is written as: each record implementing it, by the class it is written
@@ -211,9 +234,6 @@ object DukeRecords {
 
     /** What a `List` or `Set` holds; null for any other type. */
     fun elementOf(type: PsiType): PsiType? = if (isCollection(type)) typeArgument(type, 0) else null
-
-    /** The class a block for [type] is: what a collection holds, else the type's own. */
-    private fun blockClass(type: PsiType): PsiClass? = classOf(if (isCollection(type)) elementOf(type) else type)
 
     fun typeArgument(type: PsiType, index: Int): PsiType? {
         val argument = (type as? PsiClassType)?.parameters?.getOrNull(index) ?: return null

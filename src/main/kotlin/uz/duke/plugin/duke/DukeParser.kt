@@ -13,8 +13,9 @@ import uz.duke.plugin.duke.DukeTypes as T
 
 /**
  * Groups the lines the lexer has already told apart. A word opens a block and `End` closes the
- * innermost open one, as `DukeText` reads them; a block still open at the end of the file has no
- * `End`, which is how the annotator knows.
+ * innermost open one, as `DukeText` reads them; `Key = Class` opens a block that is the field's
+ * value, and a list of blocks holds its items to the `]` on a line of its own. A block still open at
+ * the end of the file has no `End`, which is how the annotator knows.
  */
 class DukeParser : PsiParser {
     override fun parse(root: IElementType, builder: PsiBuilder): ASTNode {
@@ -31,17 +32,22 @@ class DukeParser : PsiParser {
         return builder.treeBuilt
     }
 
+    /** A word, or the class after a field's `=`, then the block's lines to its End. */
     private fun block(b: PsiBuilder) {
         val block = b.mark()
         val word = b.mark()
         b.advanceLexer()
         word.done(T.BLOCK_WORD)
         rest(b)
+        body(b)
+        block.done(T.BLOCK)
+    }
+
+    private fun body(b: PsiBuilder) {
         while (!b.eof()) {
             when (b.tokenType) {
                 T.END -> {
                     line(b)
-                    block.done(T.BLOCK)
                     return
                 }
                 T.WORD -> block(b)
@@ -49,7 +55,6 @@ class DukeParser : PsiParser {
                 else -> badLine(b)
             }
         }
-        block.done(T.BLOCK)
     }
 
     private fun field(b: PsiBuilder) {
@@ -59,6 +64,7 @@ class DukeParser : PsiParser {
         key.done(T.FIELD_KEY)
         if (b.tokenType == T.EQ) b.advanceLexer()
         when (b.tokenType) {
+            T.TYPE -> block(b)
             T.LBRACKET -> list(b)
             in T.VALUES -> item(b)
         }
@@ -66,15 +72,34 @@ class DukeParser : PsiParser {
         field.done(T.FIELD)
     }
 
-    /** `[a, b]`, over as many lines as it runs: the lexer starts no line inside it. */
+    /**
+     * `[a, b]`, over as many lines as it runs, or a list of blocks: the lexer starts lines inside the
+     * second kind, the first word of them an item, and a `]` alone on its line ends it.
+     */
     private fun list(b: PsiBuilder) {
         val list = b.mark()
         b.advanceLexer()
-        while (!b.eof() && b.tokenType != T.RBRACKET && b.tokenType !in T.LINE_STARTS) {
-            if (b.tokenType in T.VALUES) item(b) else b.advanceLexer()
+        if (b.tokenType !in T.LINE_STARTS) {
+            while (!b.eof() && b.tokenType != T.RBRACKET && b.tokenType !in T.LINE_STARTS) {
+                if (b.tokenType in T.VALUES) item(b) else b.advanceLexer()
+            }
+            if (b.tokenType == T.RBRACKET) b.advanceLexer()
+            list.done(T.LIST)
+            return
         }
-        if (b.tokenType == T.RBRACKET) b.advanceLexer()
-        list.done(T.LIST)
+        while (!b.eof()) {
+            when (b.tokenType) {
+                T.LIST_END -> {
+                    line(b)
+                    break
+                }
+                T.WORD -> block(b)
+                // An End with the list still open closes what holds it: the list is left without its ].
+                T.END -> break
+                else -> badLine(b)
+            }
+        }
+        list.done(T.BLOCK_LIST)
     }
 
     private fun item(b: PsiBuilder) {
@@ -113,7 +138,7 @@ class DukeParserDefinition : ParserDefinition {
         T.BLOCK_WORD -> DukeWord(node)
         T.FIELD -> DukeField(node)
         T.FIELD_KEY -> DukeKey(node)
-        T.LIST -> DukeList(node)
+        T.LIST, T.BLOCK_LIST -> DukeList(node)
         T.ITEM -> DukeValue(node)
         T.BAD_LINE_ELEMENT -> DukeBadLine(node)
         else -> throw IllegalArgumentException("Unknown element ${node.elementType}")

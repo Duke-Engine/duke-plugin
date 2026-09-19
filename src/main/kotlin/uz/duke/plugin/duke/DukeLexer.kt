@@ -16,8 +16,10 @@ object DukeTypes {
     @JvmField val END = DukeElementType("END")
     @JvmField val KEY = DukeElementType("KEY")
     @JvmField val BAD_LINE = DukeElementType("BAD_LINE") // starts a line that fits nothing
+    @JvmField val LIST_END = DukeElementType("LIST_END") // `]` alone on its line: a list of blocks ends
     @JvmField val EQ = DukeElementType("EQ")
     @JvmField val VALUE = DukeElementType("VALUE")
+    @JvmField val TYPE = DukeElementType("TYPE") // `Cylinder` in `Geometry = Cylinder` with its fields under it
     @JvmField val NUMBER = DukeElementType("NUMBER")
     @JvmField val STRING = DukeElementType("STRING")
     @JvmField val LBRACKET = DukeElementType("LBRACKET")
@@ -32,20 +34,26 @@ object DukeTypes {
     @JvmField val FIELD = DukeElementType("FIELD")
     @JvmField val FIELD_KEY = DukeElementType("FIELD_KEY")
     @JvmField val LIST = DukeElementType("LIST")
+    @JvmField val BLOCK_LIST = DukeElementType("BLOCK_LIST") // `[`, a block for each item, `]` on a line of its own
     @JvmField val ITEM = DukeElementType("ITEM") // a value, alone or in a list
     @JvmField val BAD_LINE_ELEMENT = DukeElementType("BAD_LINE_ELEMENT")
 
-    @JvmField val LINE_STARTS = TokenSet.create(WORD, END, KEY, BAD_LINE)
+    @JvmField val LINE_STARTS = TokenSet.create(WORD, END, KEY, BAD_LINE, LIST_END)
     @JvmField val VALUES = TokenSet.create(VALUE, NUMBER, STRING)
 }
 
 /**
  * Tokenises the way `uz.duke.core.data.DukeText` reads: a line that is one word opens a block (or is
- * `End`), `Key = value` is a field, `;` starts a comment outside quotes, and a `[` list runs on over
- * as many lines as it takes to reach its `]`.
+ * `End`), `Key = value` is a field, `;` starts a comment outside quotes, and a `[` list of values runs
+ * on over as many lines as it takes to reach its `]`.
  *
- * The state is where on the line the lexer is, a list counting as one place however many lines it
- * spans; a line start outside a list is state 0, the only point the editor restarts from.
+ * Two questions look past the line, as the reader's do: `Key = Word` opens a block when the next line
+ * is indented deeper — the word is then a [DukeTypes.TYPE] — and a `[` alone on its line holds blocks
+ * when its first item is a word with its fields under it, or its `End`. Its lines are then lexed as
+ * lines, and a `]` alone on one closes it.
+ *
+ * The state is where on the line the lexer is, a list of values counting as one place however many
+ * lines it spans; a line start is state 0, the only point the editor restarts from.
  */
 class DukeLexer : LexerBase() {
     private var buffer: CharSequence = ""
@@ -92,9 +100,9 @@ class DukeLexer : LexerBase() {
             role == LINE_START -> lineStart()
             role == AFTER_KEY && c == '=' -> one(DukeTypes.EQ, AFTER_EQ)
             role == AFTER_EQ -> when (c) {
-                '[' -> one(DukeTypes.LBRACKET, IN_LIST)
+                '[' -> one(DukeTypes.LBRACKET, if (blocksFollow(tokenStart)) AFTER_VALUE else IN_LIST)
                 '"' -> string(AFTER_VALUE)
-                else -> scalar(inList = false)
+                else -> valueOrType()
             }
             role == IN_LIST -> when (c) {
                 ']' -> one(DukeTypes.RBRACKET, AFTER_VALUE)
@@ -107,24 +115,31 @@ class DukeLexer : LexerBase() {
         }
     }
 
-    /** A line's first token: one word alone, a key before `=`, or a line that fits nothing. */
+    /** A line's first token: one word alone, a key before `=`, the `]` that ends a list of blocks, or a line that fits nothing. */
     private fun lineStart(): IElementType {
+        if (buffer[tokenStart] == ']' && endsLine(tokenStart + 1)) return one(DukeTypes.LIST_END, AFTER_VALUE)
         if (isWordStart(buffer[tokenStart])) {
             val wordEnd = skip(tokenStart + 1, ::isWordPart)
-            val after = skip(wordEnd) { it != '\n' && isSpace(it) }
-            if (after >= bufferEnd || buffer[after] == '\n' || buffer[after] == ';') {
+            if (endsLine(wordEnd)) {
                 tokenEnd = wordEnd
                 role = AFTER_VALUE
                 val word = buffer.subSequence(tokenStart, wordEnd).toString()
                 return if (word.equals("End", ignoreCase = true)) DukeTypes.END else DukeTypes.WORD
             }
-            if (buffer[after] == '=') {
+            if (buffer[skip(wordEnd) { it != '\n' && isSpace(it) }] == '=') {
                 tokenEnd = wordEnd
                 role = AFTER_KEY
                 return DukeTypes.KEY
             }
         }
         return rest(DukeTypes.BAD_LINE)
+    }
+
+    /** After `=`: a value — or, one word with deeper lines under it, the class of the record written there. */
+    private fun valueOrType(): IElementType {
+        val type = scalar(inList = false)
+        val isWord = WORD.matches(buffer.subSequence(tokenStart, tokenEnd))
+        return if (type == DukeTypes.VALUE && isWord && deeperFollows(tokenStart)) DukeTypes.TYPE else type
     }
 
     /** The rest of the line's text, up to its comment, as one token. */
@@ -152,6 +167,51 @@ class DukeLexer : LexerBase() {
         tokenEnd = trimmed(end)
         role = if (inList) IN_LIST else AFTER_VALUE
         return if (NUMBER.matches(buffer.subSequence(tokenStart, tokenEnd))) DukeTypes.NUMBER else DukeTypes.VALUE
+    }
+
+    // ---- looking past the line, as the reader does ----
+
+    /** Whether the next line with code is indented deeper than the line [offset] is on. */
+    private fun deeperFollows(offset: Int): Boolean {
+        val next = nextCodeLine(offset)
+        return next >= 0 && indentOf(next) > indentOf(offset)
+    }
+
+    /** Whether the `[` at [bracket], alone on its line, opens a list of blocks: its first item a word with a body or its End. */
+    private fun blocksFollow(bracket: Int): Boolean {
+        if (!endsLine(bracket + 1)) return false
+        val first = nextCodeLine(bracket)
+        if (first < 0 || !isLoneWord(first) || isEnd(first)) return false
+        val second = nextCodeLine(first)
+        return second >= 0 && (indentOf(second) > indentOf(first) || (isLoneWord(second) && isEnd(second)))
+    }
+
+    /** Where the code of the next line after [offset]'s starts, blank and comment-only lines passed over; -1 at the end. */
+    private fun nextCodeLine(offset: Int): Int {
+        var i = skip(offset) { it != '\n' }
+        while (i < bufferEnd) {
+            val first = skip(i + 1) { it == ' ' || it == '\t' || it == '\r' }
+            if (first < bufferEnd && buffer[first] != '\n' && buffer[first] != ';') return first
+            i = skip(first) { it != '\n' }
+        }
+        return -1
+    }
+
+    /** Spaces and tabs before the code of the line [offset] is on. */
+    private fun indentOf(offset: Int): Int {
+        var start = offset
+        while (start > 0 && buffer[start - 1] != '\n') start--
+        return skip(start) { it == ' ' || it == '\t' } - start
+    }
+
+    private fun isLoneWord(start: Int) = isWordStart(buffer[start]) && endsLine(skip(start + 1, ::isWordPart))
+
+    private fun isEnd(start: Int) = buffer.subSequence(start, skip(start + 1, ::isWordPart)).toString().equals("End", ignoreCase = true)
+
+    /** Whether nothing but space and a comment follows [offset] on its line. */
+    private fun endsLine(offset: Int): Boolean {
+        val after = skip(offset) { it != '\n' && isSpace(it) }
+        return after >= bufferEnd || buffer[after] == '\n' || buffer[after] == ';'
     }
 
     /** Where the line's code ends: at its `;` comment, a `;` inside quotes being text, or at its end. */
@@ -197,6 +257,7 @@ class DukeLexer : LexerBase() {
         private const val AFTER_VALUE = 4
 
         private val NUMBER = Regex("[-+]?(\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?[fFdD]?|0[xX][0-9a-fA-F]+")
+        private val WORD = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
         private fun isSpace(c: Char) = c == ' ' || c.code < 32
         private fun isWordStart(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c == '_'

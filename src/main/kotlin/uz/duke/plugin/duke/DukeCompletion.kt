@@ -18,7 +18,6 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiRecordComponent
 import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.ProcessingContext
@@ -26,27 +25,22 @@ import uz.duke.plugin.ini.AssetKind
 import uz.duke.plugin.ini.DukeAssets
 
 /**
- * What a line may be, from the record its block is: on a line being begun, the keys the record has
- * not been given and the blocks it holds; after `=`, the constants of an enum, `Yes`/`No`, or the
- * files of the kind the key takes. At the top of a file, the words the project's files open with.
+ * What a line may be, from the record its block is. On a line being begun: the keys the record has
+ * not been given and its maps; in a list of blocks, the records the list holds. After `=`: the
+ * records the field may be, an enum's constants, `Yes`/`No`, or the files of the kind the key takes.
+ * At the top of a file, the words the project's files open with.
  */
 class DukeCompletionContributor : CompletionContributor() {
     init {
         extend(CompletionType.BASIC, psiElement().withParent(DukeWord::class.java), provider { parameters, result ->
-            val container = (parameters.position.parent as DukeWord).block.container
-            if (container == null) {
-                topLevelWords(parameters.originalFile).forEach { result.addElement(LookupElementBuilder.create(it).withInsertHandler(::closeBlock)) }
-                return@provider
-            }
-            val record = DukeRecords.recordOf(container) ?: return@provider
-            keys(record, container, result, withEquals = true)
-            for ((word, target) in DukeRecords.blockWords(record, container)) {
-                val typeText = when (target) {
-                    is PsiClass -> target.qualifiedName?.substringBeforeLast('.')
-                    is PsiRecordComponent -> target.type.presentableText
-                    else -> null
+            val block = (parameters.position.parent as DukeWord).block
+            when (val holder = block.parent) {
+                is DukeField -> choices(holder, result, closing = false)
+                is DukeList -> (holder.parent as? DukeField)?.let { choices(it, result, closing = true) }
+                is DukeBlock -> DukeRecords.recordOf(holder)?.let { keysAndMaps(it, holder, result) }
+                else -> topLevelWords(parameters.originalFile).forEach {
+                    result.addElement(LookupElementBuilder.create(it).withInsertHandler(::closeBlock))
                 }
-                result.addElement(LookupElementBuilder.create(target, word).withIcon(target.getIcon(0)).withTypeText(typeText).withInsertHandler(::closeBlock))
             }
         })
         extend(CompletionType.BASIC, psiElement().withParent(DukeKey::class.java), provider { parameters, result ->
@@ -58,8 +52,21 @@ class DukeCompletionContributor : CompletionContributor() {
             val type = DukeValueReferences.typeOf(value)
             DukeRecords.constantsOf(type)?.forEach { result.addElement(LookupElementBuilder.create(it, it.name).withIcon(it.getIcon(0))) }
             if (type != null && DukeRecords.isBoolean(type)) listOf("Yes", "No").forEach { result.addElement(LookupElementBuilder.create(it)) }
+            // A word being begun in an empty `Modules = [` reads as a value until it has a body: offer the blocks.
+            value.field?.let { choices(it, result, closing = value.isInList) }
             assets(value, result)
         })
+    }
+
+    /** The keys the record has not been given, and its maps not yet written. */
+    private fun keysAndMaps(record: PsiClass, block: DukeBlock, result: CompletionResultSet) {
+        keys(record, block, result, withEquals = true)
+        val written = block.blocks.map { it.wordText.lowercase() }
+        for ((word, component) in DukeRecords.mapWords(record)) {
+            if (word.lowercase() in written) continue
+            result.addElement(LookupElementBuilder.create(component, word).withIcon(component.getIcon(0))
+                .withTypeText(component.type.presentableText).withInsertHandler(::closeBlock))
+        }
     }
 
     /** The record's components not yet written, by the name a file writes them with. */
@@ -78,6 +85,22 @@ class DukeCompletionContributor : CompletionContributor() {
             result.addElement(lookup)
         }
     }
+
+    /** The records a field may be written as: after `Geometry = `, or as an item of `Modules = [`. */
+    private fun choices(field: DukeField, result: CompletionResultSet, closing: Boolean) {
+        val record = field.block?.let(DukeRecords::recordOf) ?: return
+        val component = DukeRecords.component(record, field.key) ?: return
+        // An item of a list is a block only where the field is a list: `SkillDistance = [20, 60]` holds numbers.
+        if (closing && !DukeRecords.isCollection(component.type)) return
+        val type = DukeRecords.blockClass(component.type)?.takeIf(DukeRecords::isChoosable) ?: return
+        for ((word, target) in DukeRecords.choices(type, field)) {
+            var lookup = LookupElementBuilder.create(target, word).withIcon(target.getIcon(0)).withTypeText(typeText(target))
+            if (closing) lookup = lookup.withInsertHandler(::closeBlock)
+            result.addElement(lookup)
+        }
+    }
+
+    private fun typeText(target: PsiElement): String? = (target as? PsiClass)?.qualifiedName?.substringBeforeLast('.')
 
     /** Files of the kind the key takes, or of the kind the list's other items are. */
     private fun assets(value: DukeValue, result: CompletionResultSet) {

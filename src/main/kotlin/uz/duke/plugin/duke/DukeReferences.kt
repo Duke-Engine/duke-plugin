@@ -7,6 +7,7 @@ import com.intellij.lang.cacheBuilder.WordsScanner
 import com.intellij.lang.findUsages.FindUsagesProvider
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.AbstractElementManipulator
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiNamedElement
@@ -75,11 +76,24 @@ class DukeFileReference(value: DukeValue) : PsiReferenceBase<DukeValue>(value, T
     override fun isReferenceTo(element: PsiElement) = false
 }
 
+/** A record named by its word alone, with nothing written in it: `Sphere` in `Geometry = Sphere`. */
+class DukeChoiceReference(value: DukeValue, private val type: PsiClass) :
+    PsiReferenceBase<DukeValue>(value, TextRange(0, value.textLength), true) {
+    override fun resolve(): PsiElement? {
+        val record = DukeRecords.accepting(type, element.unquoted, element) ?: return null
+        return DukeRecords.choices(type, element).firstOrNull { it.first.equals(element.unquoted, ignoreCase = true) }?.second ?: record
+    }
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
 object DukeValueReferences {
     fun of(value: DukeValue): Array<PsiReference> {
         if (AssetKind.of(value.unquoted) != null) return arrayOf(DukeFileReference(value))
         val type = typeOf(value) ?: return PsiReference.EMPTY_ARRAY
-        return if (DukeRecords.constantsOf(type) != null) arrayOf(DukeConstantReference(value, type)) else PsiReference.EMPTY_ARRAY
+        if (DukeRecords.constantsOf(type) != null) return arrayOf(DukeConstantReference(value, type))
+        val choice = DukeRecords.classOf(type)?.takeIf(DukeRecords::isChoosable) ?: return PsiReference.EMPTY_ARRAY
+        return arrayOf(DukeChoiceReference(value, choice))
     }
 
     /** What [value] is read as: its component's type, an item's element type, a map's value type. */
@@ -127,7 +141,10 @@ class DukeKeySearcher : QueryExecutorBase<PsiReference, ReferencesSearch.SearchP
 /** Words, keys and values join the word index, so Find Usages and Rename of a class reach `.duke` files. */
 class DukeFindUsagesProvider : FindUsagesProvider {
     override fun getWordsScanner(): WordsScanner =
-        DefaultWordsScanner(DukeLexer(), TokenSet.create(T.WORD, T.KEY, T.VALUE), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING))
+        object : DefaultWordsScanner(DukeLexer(), TokenSet.create(T.WORD, T.KEY, T.VALUE, T.TYPE), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING)) {
+            // The class after `=` joined the index in version 1, with `Geometry = Cylinder`.
+            override fun getVersion() = 1
+        }
 
     override fun canFindUsagesFor(element: PsiElement) = false
     override fun getHelpId(element: PsiElement): String? = null

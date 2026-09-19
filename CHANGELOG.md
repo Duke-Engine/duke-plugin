@@ -8,9 +8,14 @@
 
 - Duke language for `.duke` data files: highlighting, brace matching, line comments, folding of blocks and of lists
   over several lines, and a structure view of the blocks.
-- Ctrl+Click from a block's word to the Java class it is read as — a record, a module's class, a record a sealed type
-  permits — from a key to the record component it fills, and from an enum value to its constant.
-- Keys, blocks, enum constants, `Yes`/`No` and asset paths completed from the game's records.
+- Every line of a block names a field of its class: `Geometry = Cylinder` with its fields under it, `Modules = [` a
+  block for each `]`, `Armor` for a map — as the engine's `Binder` reads it.
+- Ctrl+Click from a key to the record component it fills, from a class — a block's word or the class after `=` — to
+  the Java class it is read as (a record, a module's class, a record a sealed type permits), and from an enum value
+  to its constant.
+- Keys, maps, the classes a field may be, the records a list holds (each written with its `End`), enum constants,
+  `Yes`/`No` and asset paths completed from the game's records.
+- A block written on its own where a field goes says how it is written: `Geometry = Cylinder`, `Modules = [ … ]`.
 - The engine's own checks in the editor, in its own words: an unknown block or key, a value its type cannot read, a
   list where one value goes and one value where a list goes, a key or a block written twice, a block with no `End`,
   a list never closed. A header written `Monster Brute` is fixed to `Monster` with `Name = Brute` inside it.

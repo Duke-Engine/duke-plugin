@@ -10,7 +10,11 @@ import com.intellij.psi.util.PsiTreeUtil
 import javax.swing.Icon
 import uz.duke.plugin.duke.DukeTypes as T
 
-/** A word, what is written in it, and — when it is closed — its `End`. */
+/**
+ * A word, what is written in it, and — when it is closed — its `End`. A block is one of three: at the
+ * top of a file; the value of a field, `Geometry = Cylinder` or an item of `Modules = [ … ]`; or a
+ * block of entries written on its own inside another, named by its field.
+ */
 class DukeBlock(node: ASTNode) : ASTWrapperPsiElement(node) {
     val word: DukeWord
         get() = findNotNullChildByClass(DukeWord::class.java)
@@ -24,25 +28,42 @@ class DukeBlock(node: ASTNode) : ASTWrapperPsiElement(node) {
     val fields: List<DukeField>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeField::class.java)
 
+    /** The blocks written on their own inside it: its maps. */
     val blocks: List<DukeBlock>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeBlock::class.java)
 
-    /** The block this one is written inside; null at the top of a file. */
-    val container: DukeBlock?
-        get() = parent as? DukeBlock
+    /** The field this block is the value of, or an item of: `Geometry` for `Geometry = Cylinder`. */
+    val owningField: DukeField?
+        get() = when (val parent = parent) {
+            is DukeField -> parent
+            is DukeList -> parent.parent as? DukeField
+            else -> null
+        }
+
+    /** The block whose record this one is part of; null at the top of a file. */
+    val owner: DukeBlock?
+        get() = parent as? DukeBlock ?: owningField?.block
+
+    /** Every block under it, in the order written: its values and list items, and its maps. */
+    val parts: List<DukeBlock>
+        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeField::class.java).flatMap { it.blocks } + blocks
 
     fun field(key: String): DukeField? = fields.firstOrNull { it.key.equals(key, ignoreCase = true) }
 
-    /** Its word, and its Name when it has one: `Monster Brute`. */
+    /** As the structure view says it: `Monster Brute`, `Geometry = Cylinder`, `Layer Fire`. */
     val presentableText: String
-        get() = listOfNotNull(wordText, field("Name")?.valueText).joinToString(" ")
+        get() {
+            val own = listOfNotNull(wordText, field("Name")?.valueText).joinToString(" ")
+            val holder = owningField
+            return if (holder != null && parent is DukeField) "${holder.key} = $own" else own
+        }
 
     override fun getPresentation(): ItemPresentation = PresentationData(presentableText, null, getIcon(0), null)
 
-    override fun getIcon(flags: Int): Icon = if (container == null) AllIcons.Nodes.Class else AllIcons.Json.Object
+    override fun getIcon(flags: Int): Icon = if (owner == null) AllIcons.Nodes.Class else AllIcons.Json.Object
 }
 
-/** A block's word: Ctrl+Click opens the class it is read as. */
+/** A block's word, or the class after a field's `=`: Ctrl+Click opens the class it is read as. */
 class DukeWord(node: ASTNode) : ASTWrapperPsiElement(node) {
     val block: DukeBlock
         get() = parent as DukeBlock
@@ -50,7 +71,7 @@ class DukeWord(node: ASTNode) : ASTWrapperPsiElement(node) {
     override fun getReference(): PsiReference = DukeWordReference(this)
 }
 
-/** `Key = value`, or `Key = [a, b]`. */
+/** `Key = value`, `Key = [a, b]`, `Key = Class` with its fields under it, or `Key = [` blocks `]`. */
 class DukeField(node: ASTNode) : ASTWrapperPsiElement(node) {
     val keyElement: DukeKey
         get() = findNotNullChildByClass(DukeKey::class.java)
@@ -65,17 +86,25 @@ class DukeField(node: ASTNode) : ASTWrapperPsiElement(node) {
     val list: DukeList?
         get() = findChildByClass(DukeList::class.java)
 
-    /** Its value, when that is one value and not a list. */
+    /** The record written after its `=`, when its value is one: `Cylinder` and what is under it. */
+    val nested: DukeBlock?
+        get() = findChildByClass(DukeBlock::class.java)
+
+    /** Its value, when that is one value and not a list or a record. */
     val value: DukeValue?
         get() = findChildByClass(DukeValue::class.java)
 
-    /** Its value as the engine reads it, quotes taken off: null for a list, or for nothing written. */
+    /** Its value as the engine reads it, quotes taken off: null for a list, a record or nothing written. */
     val valueText: String?
         get() = value?.unquoted
 
-    /** Every value it holds: the one, or each item of its list. */
+    /** Every value it holds: the one, or each item of its list of values. */
     val values: List<DukeValue>
         get() = list?.items ?: listOfNotNull(value)
+
+    /** The blocks it holds: the record after its `=`, or the items of its list of blocks. */
+    val blocks: List<DukeBlock>
+        get() = listOfNotNull(nested) + list?.blocks.orEmpty()
 }
 
 /** Ctrl+Click opens the record component it fills. */
@@ -86,15 +115,23 @@ class DukeKey(node: ASTNode) : ASTWrapperPsiElement(node) {
     override fun getReference(): PsiReference = DukeKeyReference(this)
 }
 
+/** `[a, b]`, or `[` with a block for each item and `]` on a line of its own. */
 class DukeList(node: ASTNode) : ASTWrapperPsiElement(node) {
     val items: List<DukeValue>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeValue::class.java)
 
+    val blocks: List<DukeBlock>
+        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeBlock::class.java)
+
+    /** Whether it holds blocks rather than values. */
+    val holdsBlocks: Boolean
+        get() = node.elementType == T.BLOCK_LIST
+
     val isClosed: Boolean
-        get() = node.findChildByType(T.RBRACKET) != null
+        get() = node.findChildByType(T.RBRACKET) != null || node.findChildByType(T.LIST_END) != null
 }
 
-/** One value, alone after `=` or an item of a list; it may name an asset or an enum constant. */
+/** One value, alone after `=` or an item of a list; it may name an asset, an enum constant or a record. */
 class DukeValue(node: ASTNode) : ASTWrapperPsiElement(node) {
     /** As the engine reads it: a quoted value without its quotes, `\x` read as `x`. */
     val unquoted: String
