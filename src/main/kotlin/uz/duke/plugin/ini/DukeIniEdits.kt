@@ -42,10 +42,6 @@ object DukeIniEdits {
         document.insertString(lineEnd, "\n${indentOf(document, after.textRange.startOffset)}$key = $value")
     }
 
-    /** `Update = MoveUpdate Tag`, its fields and its `End`, before the block's own `End`. */
-    fun addModule(document: Document, block: DukeIniBlock, key: String, module: String, fields: List<Pair<String, String>>) =
-        addSection(document, block, key, "$module Tag", fields)
-
     /** `Generation = Layout`, its fields and its `End`, before [parent]'s own `End`. */
     fun addSection(document: Document, parent: DukeIniSection, key: String, names: String, fields: List<Pair<String, String>>) {
         val indent = innerIndent(document, parent)
@@ -73,7 +69,7 @@ object DukeIniEdits {
         append("End\n")
     }
 
-    /** Deletes the whole lines [element] spans: a field, a module or a block. */
+    /** Deletes the whole lines [element] spans: a field, a section or a block. */
     fun remove(document: Document, element: PsiElement) {
         val range = element.textRange
         val last = document.getLineNumber(range.endOffset)
@@ -91,7 +87,7 @@ object DukeIniEdits {
         }
     }
 
-    /** As the section's first field, module or section is indented, else two more than its first line. */
+    /** As the section's first field or section is indented, else two more than its first line. */
     private fun innerIndent(document: Document, section: DukeIniSection): String {
         val first: PsiElement? = section.fields.firstOrNull() ?: section.parts.firstOrNull()
         return if (first != null) indentOf(document, first.textRange.startOffset) else indentOf(document, section.textRange.startOffset) + "  "

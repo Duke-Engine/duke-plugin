@@ -4,6 +4,28 @@
 
 ## Unreleased
 
+### Added
+
+- Duke language for `.duke` data files: highlighting, brace matching, line comments, folding of blocks and of lists
+  over several lines, and a structure view of the blocks.
+- Ctrl+Click from a block's word to the Java class it is read as — a record, a module's class, a record a sealed type
+  permits — from a key to the record component it fills, and from an enum value to its constant.
+- Keys, blocks, enum constants, `Yes`/`No` and asset paths completed from the game's records.
+- The engine's own checks in the editor, in its own words: an unknown block or key, a value its type cannot read, a
+  list where one value goes and one value where a list goes, a key or a block written twice, a block with no `End`,
+  a list never closed. A header written `Monster Brute` is fixed to `Monster` with `Name = Brute` inside it.
+- Renaming a module class, a record component or an enum constant renames it in the data files.
+- `.duke` paths, as a manifest lists them, checked and opened like asset paths.
+
+### Removed
+
+- Module lines in INI files (`Update = MoveUpdate Tag`), with their completion, checks and navigation: the engine
+  reads modules from `.duke` blocks named by their class.
+- The check of `ModuleFactory.register` names: a module is registered by its `Data` record, with no name to get wrong.
+- Template block types in INI files (`Object`, a game's `Monster`): they are `.duke` records.
+- File > New > Duke Unit, and the Inspector's unit suggestions and module menu, which wrote INI units the engine no
+  longer reads.
+
 ## 0.1.0-beta.1 - 2026-09-19
 
 ### Added

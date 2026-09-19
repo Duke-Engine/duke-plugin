@@ -1,0 +1,15 @@
+; Units
+Monster<fold text='...'>
+  Name = Brute
+  Cylinder<fold text='...'>
+    Radius = 4
+  End</fold>
+  Kinds = <fold text='[...]'>[
+    A,
+    B,
+  ]</fold>
+End</fold>
+
+Effect ; a comment after the word<fold text='...'>
+  Name = Fire
+End</fold>

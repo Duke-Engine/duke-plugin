@@ -30,7 +30,7 @@ class DukeIniStructureViewFactory : PsiStructureViewFactory {
         }
 }
 
-/** Blocks, and under each the modules and sections it is made of. */
+/** Blocks, and under each the sections it is made of. */
 class DukeIniStructureViewModel(file: PsiFile, editor: Editor?) :
     StructureViewModelBase(file, editor, DukeIniStructureElement(file)), StructureViewModel.ElementInfoProvider {
 
@@ -40,7 +40,7 @@ class DukeIniStructureViewModel(file: PsiFile, editor: Editor?) :
 
     override fun getSorters(): Array<Sorter> = arrayOf(Sorter.ALPHA_SORTER)
     override fun isAlwaysShowsPlus(element: StructureViewTreeElement) = false
-    override fun isAlwaysLeaf(element: StructureViewTreeElement) = element.value is DukeIniModule
+    override fun isAlwaysLeaf(element: StructureViewTreeElement) = (element.value as? DukeIniSection)?.parts?.isEmpty() == true
 }
 
 class DukeIniStructureElement(private val element: NavigatablePsiElement) : StructureViewTreeElement, SortableTreeElement {
@@ -64,7 +64,7 @@ class DukeIniStructureElement(private val element: NavigatablePsiElement) : Stru
     }
 }
 
-/** Folds a block, or a module, down to its first line (a comment on that line stays visible). */
+/** Folds a block, or a section, down to its first line (a comment on that line stays visible). */
 class DukeIniFoldingBuilder : FoldingBuilderEx(), DumbAware {
     override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> =
         PsiTreeUtil.findChildrenOfType(root, DukeIniSection::class.java)

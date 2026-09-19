@@ -26,7 +26,6 @@ class DukeIniSyntaxHighlighter : SyntaxHighlighterBase() {
     companion object {
         val KEYWORD = createTextAttributesKey("DUKE_INI_KEYWORD", Default.KEYWORD)
         val NAME = createTextAttributesKey("DUKE_INI_NAME", Default.CLASS_NAME)
-        val MODULE_NAME = createTextAttributesKey("DUKE_INI_MODULE_NAME", Default.CLASS_REFERENCE)
         val KEY = createTextAttributesKey("DUKE_INI_KEY", Default.INSTANCE_FIELD)
         val VALUE = createTextAttributesKey("DUKE_INI_VALUE", Default.STRING)
         val NUMBER = createTextAttributesKey("DUKE_INI_NUMBER", Default.NUMBER)
@@ -35,8 +34,8 @@ class DukeIniSyntaxHighlighter : SyntaxHighlighterBase() {
         val COMMENT = createTextAttributesKey("DUKE_INI_COMMENT", Default.LINE_COMMENT)
 
         private val COLORS: Map<IElementType, TextAttributesKey> = mapOf(
-            T.BLOCK_TYPE to KEYWORD, T.END to KEYWORD, T.MODULE_KEY to KEYWORD, T.SECTION_KEY to KEYWORD,
-            T.NAME to NAME, T.MODULE_NAME to MODULE_NAME, T.KEY to KEY,
+            T.BLOCK_TYPE to KEYWORD, T.END to KEYWORD, T.SECTION_KEY to KEYWORD,
+            T.NAME to NAME, T.KEY to KEY,
             T.VALUE to VALUE, T.NUMBER to NUMBER, T.STRING to STRING,
             T.EQ to EQ, T.COMMENT to COMMENT,
         )

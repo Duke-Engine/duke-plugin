@@ -1,14 +1,12 @@
 package uz.duke.plugin.engine
 
 import com.intellij.lang.annotation.HighlightSeverity
-import com.intellij.psi.PsiLiteralExpression
-import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiMethodCallExpression
-import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiRecordComponent
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import java.io.File
 
-/** Against the engine next to the plugin: its real classes, registrations and game files are the spec. */
+/** Against the engine next to the plugin: its real records, registrations and game files are the spec. */
 class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     override fun setUp() {
         super.setUp()
@@ -18,120 +16,64 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         }
     }
 
-    fun testGameFilesAreCleanAgainstTheEngine() {
-        val files = File("../dungeon/src/main/resources/ini").walkTopDown().filter { it.extension == "ini" }.toList()
-        assertTrue("no INI files found next to the plugin", files.size >= 5)
+    /** Every data file the game ships reads as the engine reads it: not one may raise a problem. */
+    fun testGameDataIsCleanAgainstTheEngine() {
+        val files = File("../dungeon/src/main/resources/data").walkTopDown().filter { it.extension == "duke" }.toList()
+        assertTrue("no data files found next to the plugin", files.size >= 40)
         assertEmpty(files.flatMap { file ->
             myFixture.configureByText(file.name, file.readText())
-            myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
+            myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING)
+                .map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
         })
         // Clean because it was checked, not because the engine went unseen.
-        myFixture.configureByText("check.ini", "Object Hero\n  Update = MoveUpdat Tag\n  End\nEnd\n")
-        assertEquals(listOf("Unknown module 'MoveUpdat'"), myFixture.doHighlighting(HighlightSeverity.ERROR).map { it.description })
-    }
-
-    fun testModulesAndFieldsComeFromTheClasses() {
-        myFixture.configureByText("check.ini", "")
-        val engine = DukeModules.of(myFixture.file)!!
-        assertContainsElements(
-            engine.modules.map { it.name },
-            "ActiveBody", "MoveUpdate", "WeaponUpdate", "ExperienceModule", "GrowableBody", "Bow", "Swing", "Script:",
+        myFixture.configureByText("check.duke", "Monster\n  Name = Brute\n  Sped = 1\n  MoveUpdat\n  End\nEnd\n")
+        assertSameElements(
+            myFixture.doHighlighting(HighlightSeverity.ERROR).map { it.description },
+            "'Monster' has no field 'Sped'", "'Monster' holds no block 'MoveUpdat'",
         )
-        assertDoesntContain(engine.modules.map { it.name }, "Module", "UpdateModule", "BodyModule", "ScriptModule")
-        assertEquals(listOf("Speed", "TurnRate"), engine.find("MoveUpdate")!!.fields)
-        assertEquals(listOf("MaxHealth", "Armor"), engine.find("ActiveBody")!!.fields)
-        assertEquals(emptyList<String>(), engine.find("Swing")!!.fields)
-        assertEquals("uz.duke.game.script.ScriptModule", engine.find("Script:HeroBrain")!!.psiClass.qualifiedName)
     }
 
-    /** The block types and their fields are the game's code, read as it is written. */
-    fun testBlocksAndTheirFieldsComeFromTheGame() {
-        myFixture.configureByText("check.ini", "")
+    /** The world's INI file is clean too, and its sections are read off the settings' code. */
+    fun testWorldSettingsAreCleanAndTheirSchemaIsTheGames() {
+        val world = File("../dungeon/src/main/resources/ini/dungeon.ini")
+        myFixture.configureByText(world.name, world.readText())
+        assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${it.description} at '${it.text}'" })
+
         val schema = DukeSchemas.of(myFixture.file)!!
-        assertTrue("too few block types to be a scan: ${schema.blocks.map { it.type }}", schema.blocks.size >= 15)
-
-        val skill = schema.block("DungeonSkill")!!
-        assertEquals(2, skill.names) // DungeonSkill Rogue Q
-        assertEquals(FieldKind.ENUM, skill.field("Effect")!!.kind)
-        assertContainsElements(skill.field("Effect")!!.choices, "STRIKE")
-        assertEquals(FieldKind.REAL, skill.field("Range")!!.kind)
-
-        val sound = schema.block("DungeonSound")!!
-        assertTrue(sound.field("File")!!.list)
-        assertEquals(FieldKind.BOOL, sound.field("Positional")!!.kind)
-
-        // Registered as `registry.put("Object", this::parseObject)`, its table built in a method of its own.
-        val template = schema.block("Object")!!
-        assertEquals(1, template.names)
-        assertEquals(FieldKind.REAL, template.field("VisionRange")!!.kind)
-        // Registered under a constant, `Map.of(MANIFEST, ...)`.
-        assertTrue(schema.block("DungeonContent")!!.field("File")!!.list)
-
-        // A game's unit block: the engine's fields for what its record can do, and the game's own,
-        // its portrait's among them under Portrait... names.
-        val monster = schema.block("Monster")!!
-        assertTrue(monster.template)
-        assertEquals(FieldKind.REAL, monster.field("SenseRadius")!!.kind)
-        assertNotNull(monster.field("DisplayName"))
-        assertNotNull(monster.field("GeometryHeight"))
-        assertNotNull(monster.field("PortraitYaw"))
-        assertNotNull(schema.block("Hero")!!.field("PortraitCalm"))
-        // An arrow is not solid, so its block takes no shape; it may see.
-        val projectile = schema.block("Projectile")!!
-        assertNull(projectile.field("Geometry"))
-        assertNotNull(projectile.field("VisionRange"))
-        assertTrue(template.template)
-
-        // A block of sections: the world, each section read by the field that opens it.
-        val world = schema.block("World")!!
-        assertTrue("too few sections to be a scan", world.fields.count { it.section != null } >= 30)
-        assertEquals(FieldKind.REAL, world.field("LevelHeight")!!.kind)
-        assertNull(world.field("MapWidth")) // Generation's, not the world's
-        assertEquals(FieldKind.INTEGER, world.field("Generation")!!.section!!.field("MapWidth")!!.kind)
-        assertEquals(FieldKind.REAL, world.field("StatBlock")!!.section!!.field("FigureIcon")!!.kind)
-        val item = world.field("LootItem")!!
+        val block = schema.block("World")!!
+        assertTrue("too few sections to be a scan", block.fields.count { it.section != null } >= 30)
+        assertEquals(FieldKind.REAL, block.field("LevelHeight")!!.kind)
+        assertNull(block.field("MapWidth")) // Generation's, not the world's
+        assertEquals(FieldKind.INTEGER, block.field("Generation")!!.section!!.field("MapWidth")!!.kind)
+        assertEquals(FieldKind.REAL, block.field("StatBlock")!!.section!!.field("FigureIcon")!!.kind)
+        val item = block.field("LootItem")!!
         assertTrue("a section written once per item", item.list)
         assertEquals(FieldKind.ENUM, item.section!!.field("Kind")!!.kind)
-        assertEquals(2, world.field("Tone")!!.section!!.names) // Tone = Forest Wooded
+        assertEquals(2, block.field("Tone")!!.section!!.names) // Tone = Forest Wooded
         assertNull("a section is not a block of its own", schema.block("LootItem"))
     }
 
-    fun testModulesAreGroupedAndKnowTheirKey() {
-        myFixture.configureByText("check.ini", "")
-        val engine = DukeModules.of(myFixture.file)!!
-        assertEquals(listOf("Movement"), engine.find("MoveUpdate")!!.groups)
-        assertEquals(listOf("Combat", "Movement", "Effect", "Body"), engine.find("SkillBook")!!.groups)
-        assertEquals(FieldKind.REAL, engine.find("MoveUpdate")!!.specs!!.first { it.name == "Speed" }.kind)
-        assertEquals("Body", engine.find("GrowableBody")!!.key)
-        assertEquals("Update", engine.find("MoveUpdate")!!.key)
-        assertEquals("Behavior", engine.find("ExperienceModule")!!.key)
+    /** Ctrl+Click on a word opens the class the engine reads it as; on a key, the component it fills. */
+    fun testWordsOpenTheClassesTheEngineReadsThemAs() {
+        assertEquals("uz.duke.dungeon.content.Monster", classAt("Mon<caret>ster\nEnd\n"))
+        assertEquals("uz.duke.rts.RtsTemplate", classAt("Obj<caret>ect\nEnd\n"))
+        assertEquals("uz.duke.dungeon.content.Effect", classAt("Eff<caret>ect\nEnd\n"))
+        assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Move<caret>Update\n  End\nEnd\n"))
+        assertEquals("uz.duke.game.script.ScriptModule", classAt("Monster\n  Script<caret>Module\n  End\nEnd\n"))
+        assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Cyl<caret>inder\n  End\nEnd\n"))
+        assertEquals("uz.duke.dungeon.skill.Skill", classAt("Monster\n  Sk<caret>ill\n  End\nEnd\n"))
+        assertEquals("uz.duke.dungeon.content.PortraitArt", classAt("Hero\n  Por<caret>trait\n  End\nEnd\n"))
+
+        myFixture.configureByText("u.duke", "Object\n  ActiveBody\n    Max<caret>Health = 1\n  End\nEnd\n")
+        assertEquals("maxHealth", (myFixture.elementAtCaret as PsiRecordComponent).name)
     }
 
-    fun testEveryRegisteredNameIsTheClassName() {
-        myFixture.configureByText("check.ini", "")
-        val engine = DukeModules.of(myFixture.file)!!
-        val psiManager = PsiManager.getInstance(project)
-        val names = REGISTERING_FILES
-            .map { psiManager.findFile(myFixture.findFileInTempDir(it))!! }
-            .flatMap { PsiTreeUtil.findChildrenOfType(it, PsiMethodCallExpression::class.java) }
-            .filter { it.methodExpression.referenceName == "register" }
-            .mapNotNull { (it.argumentList.expressions.firstOrNull() as? PsiLiteralExpression)?.value as? String }
-        assertTrue("registrations not found: $names", names.size >= 25)
-        assertEmpty(names.filter { engine.find(it) == null })
-
-        myFixture.enableInspections(DukeModuleRegistrationInspection())
-        for (path in REGISTERING_FILES) {
-            myFixture.configureFromTempProjectFile(path)
-            assertEmpty(myFixture.doHighlighting().mapNotNull { it.description }.filter { it.startsWith("Registered name") })
-        }
+    private fun classAt(text: String): String? {
+        myFixture.configureByText("u.duke", text)
+        return (myFixture.elementAtCaret as PsiClass).qualifiedName
     }
 
     private companion object {
         val ENGINE_MODULES = listOf("core", "rts", "game", "dungeon")
-        val REGISTERING_FILES = listOf(
-            "uz/duke/core/module/ModuleFactory.java",
-            "uz/duke/rts/module/RtsModules.java",
-            "uz/duke/dungeon/Dungeon.java",
-        )
     }
 }

@@ -40,7 +40,8 @@ enum class AssetKind(private val label: String, val extensions: List<String>) {
     MODEL("a model", listOf("glb", "gltf", "obj", "j3o")),
     IMAGE("an image", listOf("png", "jpg", "jpeg", "tga", "dds")),
     AUDIO("a sound", listOf("ogg", "wav", "mp3")),
-    FONT("a font", listOf("fnt"));
+    FONT("a font", listOf("fnt")),
+    DATA("a data file", listOf("duke"));
 
     override fun toString() = "$label (${extensions.joinToString { ".$it" }})"
 
@@ -62,7 +63,7 @@ enum class AssetKind(private val label: String, val extensions: List<String>) {
 }
 
 /**
- * Asset paths as the game loads them: whole, from the resource root the INI file sits in, the
+ * Asset paths as the game loads them: whole, from the resource root the INI or `.duke` file sits in, the
  * classpath root jME loads from (`Model = models/heroes/rogue.glb`). No folder is put in front of
  * a name, so a game may keep its files in whatever structure it likes.
  */

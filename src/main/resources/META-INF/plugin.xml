@@ -5,28 +5,34 @@
     <vendor url="https://www.sonic.uz">Sonic development team</vendor>
 
     <description><![CDATA[
-        Editor support for the INI files that hold a Duke Engine game's content: its units, its world and its
-        settings. Duke Engine is a deterministic Java game engine; block types and fields are read from the game's
-        own code, so the plugin knows no particular game.
+        Editor support for the files that hold a Duke Engine game's content: its <code>.duke</code> data files — units,
+        projectiles, effects, sounds — and the INI file of its world settings. Duke Engine is a deterministic Java game
+        engine; what a block may hold is read from the game's own records, so the plugin knows no particular game.
+        <h3><code>.duke</code> files</h3>
         <ul>
-            <li>Highlighting for block headers, <code>End</code>, keys, values, numbers, strings and <code>;</code> comments</li>
-            <li>Sections inside a block, as a <code>World</code> block holds them: <code>Generation = Layout</code>,
-                its fields and an <code>End</code> of its own</li>
-            <li>Folding for every block, module and section, and a structure view listing them</li>
-            <li>Checks for unclosed blocks, stray <code>End</code> lines and unrecognized lines</li>
-            <li>Ctrl+Click from a block name used elsewhere, such as the hero a skill belongs to, to its definition</li>
-            <li>Module names and module fields completed and checked against the engine's <code>Module</code> classes
-                on the project classpath; Ctrl+Click from a module name to its class</li>
-            <li>A warning where <code>ModuleFactory.register</code> gives a module a name other than its class name,
-                with a quick fix</li>
-            <li>Asset paths, each written whole from the resource root (<code>Model = models/heroes/rogue.glb</code>),
-                completed there, checked with exact letter case, and opened by Ctrl+Click</li>
-            <li>Duke Inspector tool window: the selected INI file as a form, with a checkbox, a list of files,
-                block names or animation clips, or a text field for each field, modules added by group, sections,
-                and the blocks a unit is missing offered in one click</li>
-            <li>File &gt; New &gt; Duke Unit: an empty unit or a renamed copy, added to the game's list of files</li>
+            <li>Highlighting for block words, <code>End</code>, keys, values, numbers, strings, <code>[a, b]</code> lists
+                and <code>;</code> comments; brace matching and line comments</li>
+            <li>Ctrl+Click from a block's word to the Java class it is read as — <code>Monster</code> to its record,
+                <code>MoveUpdate</code> to the module class, <code>Cylinder</code> to the shape — and from a key to the record
+                component it fills</li>
+            <li>Keys and blocks completed from the record the block is; enum constants, <code>Yes</code>/<code>No</code> and
+                asset paths completed after <code>=</code></li>
+            <li>Checked as the engine reads them: an unknown block or key, a value its type cannot read, a list where one
+                value goes, a key written twice, a block with no <code>End</code> — each said in the engine's own words</li>
+            <li>A header written <code>Monster Brute</code> is fixed to <code>Monster</code> with <code>Name = Brute</code> inside</li>
+            <li>Asset and data paths, each written whole from the resource root, completed, checked with exact letter case,
+                and opened by Ctrl+Click</li>
+            <li>Renaming a module class, a record component or an enum constant renames it in the data files</li>
+            <li>Folding for every block and every list over several lines, and a structure view of the blocks</li>
         </ul>
-        Every <code>.ini</code> file opens as Duke INI. The fields of blocks and sections are not checked; a module's are.
+        <h3>INI world settings</h3>
+        <ul>
+            <li>Highlighting, folding and a structure view; sections inside a block, <code>Generation = Layout</code> to its own
+                <code>End</code></li>
+            <li>Checks for unclosed blocks, stray <code>End</code> lines and unrecognized lines</li>
+            <li>Duke Inspector tool window: the selected INI file as a form, with a checkbox, a list of files, block names or
+                animation clips, or a text field for each field, and its sections</li>
+        </ul>
         ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -35,6 +41,31 @@
     <resource-bundle>messages.DukeBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <!-- .duke data files -->
+        <fileType name="Duke" language="Duke" extensions="duke"
+                  implementationClass="uz.duke.plugin.duke.DukeFileType" fieldName="INSTANCE"/>
+        <lang.parserDefinition language="Duke" implementationClass="uz.duke.plugin.duke.DukeParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="Duke"
+                                       implementationClass="uz.duke.plugin.duke.DukeSyntaxHighlighterFactory"/>
+        <lang.foldingBuilder language="Duke" implementationClass="uz.duke.plugin.duke.DukeFoldingBuilder"/>
+        <lang.psiStructureViewFactory language="Duke" implementationClass="uz.duke.plugin.duke.DukeStructureViewFactory"/>
+        <lang.commenter language="Duke" implementationClass="uz.duke.plugin.duke.DukeCommenter"/>
+        <lang.braceMatcher language="Duke" implementationClass="uz.duke.plugin.duke.DukeBraceMatcher"/>
+        <lang.findUsagesProvider language="Duke" implementationClass="uz.duke.plugin.duke.DukeFindUsagesProvider"/>
+        <referencesSearch implementation="uz.duke.plugin.duke.DukeKeySearcher"/>
+        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeWord"
+                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
+        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeKey"
+                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
+        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeValue"
+                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
+        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeEngineAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAssetAnnotator"/>
+        <completion.contributor language="Duke" implementationClass="uz.duke.plugin.duke.DukeCompletionContributor"/>
+        <typedHandler implementation="uz.duke.plugin.duke.DukeTypedHandler"/>
+
+        <!-- INI world settings -->
         <fileType name="Duke INI" language="DukeIni" extensions="ini"
                   implementationClass="uz.duke.plugin.ini.DukeIniFileType" fieldName="INSTANCE"/>
         <lang.parserDefinition language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniParserDefinition"/>
@@ -44,20 +75,11 @@
         <lang.psiStructureViewFactory language="DukeIni"
                                       implementationClass="uz.duke.plugin.ini.DukeIniStructureViewFactory"/>
         <lang.findUsagesProvider language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFindUsagesProvider"/>
-        <lang.elementManipulator forClass="uz.duke.plugin.ini.DukeIniModuleName"
-                                 implementationClass="uz.duke.plugin.ini.DukeIniModuleNameManipulator"/>
         <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniAnnotator"/>
-        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeModuleAnnotator"/>
-        <completion.contributor language="DukeIni"
-                                implementationClass="uz.duke.plugin.ini.DukeModuleCompletionContributor"/>
         <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeAssetAnnotator"/>
         <completion.contributor language="DukeIni"
                                 implementationClass="uz.duke.plugin.ini.DukeAssetCompletionContributor"/>
         <typedHandler implementation="uz.duke.plugin.ini.DukeIniTypedHandler"/>
-        <localInspection language="JAVA" shortName="DukeModuleRegistration"
-                         bundle="messages.DukeBundle" key="inspection.registration.name" groupKey="inspection.group"
-                         enabledByDefault="true" level="WARNING"
-                         implementationClass="uz.duke.plugin.engine.DukeModuleRegistrationInspection"/>
         <toolWindow id="Duke Inspector" anchor="right" icon="AllIcons.Toolwindows.ToolWindowStructure"
                     factoryClass="uz.duke.plugin.inspector.DukeInspectorFactory"/>
     </extensions>
@@ -66,11 +88,4 @@
         <listener class="uz.duke.plugin.inspector.DukeInspectorOpener"
                   topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
-
-    <actions>
-        <action id="Duke.NewUnit" class="uz.duke.plugin.inspector.DukeNewUnitAction" text="Duke Unit…"
-                description="Create a unit's INI file and add it to the game's list of files" icon="AllIcons.Nodes.Class">
-            <add-to-group group-id="NewGroup" anchor="last"/>
-        </action>
-    </actions>
 </idea-plugin>

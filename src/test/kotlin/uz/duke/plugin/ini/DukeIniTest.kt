@@ -1,21 +1,18 @@
 package uz.duke.plugin.ini
 
-import com.intellij.codeInsight.completion.CompletionParameters
-import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import uz.duke.plugin.engine.DukeModules
 import java.io.File
 
 class DukeIniTest : BasePlatformTestCase() {
     override fun getTestDataPath() = "src/test/testData"
 
-    /** The game's own files are the spec: not one of them may raise a problem. */
+    /** The game's own INI file is the spec: not one line of it may raise a problem. */
     fun testGameFilesAreClean() {
         val files = File("../dungeon/src/main/resources/ini").walkTopDown().filter { it.extension == "ini" }.toList()
-        assertTrue("no INI files found next to the plugin", files.size >= 5)
+        assertTrue("no INI files found next to the plugin", files.isNotEmpty())
         assertEmpty(files.flatMap { file ->
             myFixture.configureByText(file.name, file.readText())
             myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
@@ -26,36 +23,24 @@ class DukeIniTest : BasePlatformTestCase() {
         myFixture.configureByText(
             "broken.ini",
             """
-            |<warning descr="Unrecognized line: expected a block header such as 'Object Name'">Speed = 5</warning>
+            |<warning descr="Unrecognized line: expected a block header such as 'World Name'">Speed = 5</warning>
             |DungeonHero Rogue
             |  Kind = A
             |  Kind = B
             |  Holds = bow
             |  HeldIn = left
-            |  HeldRoll = 180
             |  Holds = quiver
             |  HeldIn = back
-            |  HeldRoll = 12
-            |  Library = a
-            |  Library = b
-            |  Library = c
             |End
             |DungeonHero Knight
-            |  Kind = C
-            |  Kind = D
-            |  Holds = sword
-            |  HeldIn = right
-            |  Holds = shield
-            |  HeldIn = left
             |  Speed = 1
             |  speed = 2
             |  <warning descr="Unrecognized line: expected 'Key = value' or End">42 = x</warning>
             |End
-            |Object Hero
-            |  Update = MoveUpdate Tag
-            |    TurnRate = 0
-            |    Speed = 2
-            |    Speed = 3
+            |World Dungeon
+            |  Generation = Layout
+            |    MapWidth = 2
+            |    MapWidth = 3
             |  End
             |End
             |<error descr="End without an open block">End</error>
@@ -64,23 +49,13 @@ class DukeIniTest : BasePlatformTestCase() {
             |<error descr="'Object Orc' is not closed: missing End">Object Orc</error>
             |  Speed = 3
             |<error descr="'Object Goblin' is not closed: missing End">Object Goblin</error>
-            |  <error descr="'Update = MoveUpdate Tag' is not closed: missing End">Update = MoveUpdate Tag</error>
+            |  <error descr="'Generation = Layout' is not closed: missing End">Generation = Layout</error>
             |    Speed = 1
             |Object Troll
             |End
             """.trimMargin(),
         )
         myFixture.checkHighlighting()
-    }
-
-    /** This project has no engine classes: nothing to check module names against, and completion says why. */
-    fun testWithoutTheEngineModulesAreLeftAlone() {
-        myFixture.configureByText("units.ini", "Object Hero\n  Update = Anything<caret> Tag\n    Whatever = 1\n  End\nEnd\n")
-        assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING))
-        assertNull(DukeModules.of(myFixture.file))
-        val position = myFixture.file.findElementAt(myFixture.caretOffset - 1)!!
-        val parameters = CompletionParameters(position, myFixture.file, CompletionType.BASIC, myFixture.caretOffset, 1, myFixture.editor) { false }
-        assertEquals("Duke Engine not found on classpath", DukeModuleCompletionContributor().handleEmptyLookup(parameters, myFixture.editor))
     }
 
     /** A block may hold sections, `Generation = Layout` to its own End: told from a field by what is indented under it. */
@@ -114,14 +89,12 @@ class DukeIniTest : BasePlatformTestCase() {
 
     fun testStructureView() {
         myFixture.configureByText(
-            "units.ini",
+            "world.ini",
             """
             |Object Rogue
             |  DisplayName = Erika
-            |  Update = MoveUpdate Tag
+            |  Stage = Play
             |    Speed = 27.2
-            |  End
-            |  Behavior = ExperienceModule Tag
             |  End
             |End
             |DungeonSkill Rogue Q
@@ -138,10 +111,9 @@ class DukeIniTest : BasePlatformTestCase() {
             PlatformTestUtil.assertTreeEqual(
                 component.tree,
                 """
-                |-units.ini
+                |-world.ini
                 | -Object Rogue
-                |  Update = MoveUpdate Tag
-                |  Behavior = ExperienceModule Tag
+                |  Stage = Play
                 | DungeonSkill Rogue Q
                 | -World Dungeon
                 |  Generation = Layout

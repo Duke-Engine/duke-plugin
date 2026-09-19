@@ -5,7 +5,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAssignmentExpression
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassObjectAccessExpression
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
@@ -14,7 +13,6 @@ import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiIfStatement
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiLambdaExpression
 import com.intellij.psi.PsiLiteralExpression
@@ -33,7 +31,6 @@ import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.containers.ConcurrentFactoryMap
@@ -49,11 +46,8 @@ data class FieldSpec(
     val name: String, val kind: FieldKind, val list: Boolean = false, val choices: List<String> = emptyList(), val section: BlockSpec? = null,
 )
 
-/**
- * A block type the game's code parses: how many names follow the type in its header, and what it
- * reads. [template]: a thing is built from it — `Object`, a game's `Monster` — so it carries modules.
- */
-data class BlockSpec(val type: String, val names: Int, val fields: List<FieldSpec>, val template: Boolean = false) {
+/** A block type the game's code parses: how many names follow the type in its header, and what it reads. */
+data class BlockSpec(val type: String, val names: Int, val fields: List<FieldSpec>) {
     fun field(key: String) = fields.firstOrNull { it.name.equals(key, ignoreCase = true) }
 }
 
@@ -62,23 +56,20 @@ class DukeSchema(val blocks: List<BlockSpec>) {
 }
 
 /**
- * The block types and fields a game reads, taken from its code as [DukeModules] takes modules.
+ * The INI block types and fields a game reads, taken from its code.
  *
  * - Every `initFromIni(x, TABLE)` is a block, named by the key it is registered under
- *   (`Map.entry("DungeonSkill", reader -> ...)`), and `TABLE`'s `add("Field", Ini.real(...))`
+ *   (`Map.of("World", reader -> ...)`), and `TABLE`'s `add("Field", Ini.real(...))`
  *   calls are its fields, followed through `addAll`, `on` and `prefixed("Portrait")`.
  * - A field whose parser reads a table of its own until End is a section inside the block:
  *   `add("Generation", Ini.section(LAYOUT))`, or a parser that calls `initFromIni` itself.
- * - Every `loader.type("Monster", Monster.class, TABLE, ...)` is a template block: it takes the
- *   engine's fields for the capabilities `Monster` implements, as the loader's own code grants them
- *   (`if (Solid.class.isAssignableFrom(template)) table.add("Geometry", ...)`), and `TABLE`'s.
  *
- * Nothing here names a game.
+ * The engine's own data — templates, a game's records — is `.duke`, read by records rather than
+ * tables: see [uz.duke.plugin.duke.DukeRecords]. Nothing here names a game.
  */
 object DukeSchemas {
     private const val INI_CLASS = "uz.duke.core.ini.Ini"
     private const val TABLE_CLASS = "uz.duke.core.ini.FieldParseTable"
-    private const val LOADER_CLASS = "uz.duke.core.thing.ThingTemplateLoader"
 
     /** Sections inside sections are read this deep; a table that opens itself would otherwise never end. */
     private const val MAX_NESTING = 3
@@ -103,7 +94,7 @@ object DukeSchemas {
         val specs = LinkedHashMap<String, BlockSpec>()
         // One block type may be read in two places, as a game's unit block is: its fields are both.
         fun put(spec: BlockSpec) = specs.merge(spec.type.lowercase(), spec) { a, b ->
-            BlockSpec(a.type, maxOf(a.names, b.names), (a.fields + b.fields).distinctBy { it.name.lowercase() }, a.template || b.template)
+            BlockSpec(a.type, maxOf(a.names, b.names), (a.fields + b.fields).distinctBy { it.name.lowercase() })
         }
 
         // Found by name, not by resolving: `reader` in `Map.entry("X", reader -> ...)` is typed by
@@ -113,23 +104,10 @@ object DukeSchemas {
             val parser = PsiTreeUtil.getParentOfType(call, PsiLambdaExpression::class.java, PsiMethod::class.java) ?: continue
             // A section's parser is a field of the block that holds it, not a block of its own.
             if (isTableAdd((parser.parent as? PsiExpressionList)?.parent as? PsiMethodCallExpression)) continue
-            // A module's parseData reads a table too, but nothing registers it as a block.
+            // A table read where no key registers it is not a block of its own.
             val types = blockTypesOf(parser).ifEmpty { continue }
             val fields = fieldsOf(call.argumentList.expressions[1])
             for (type in types) put(BlockSpec(type, namesRead(parser, call), fields))
-        }
-
-        val loader = facade.findClass(LOADER_CLASS, scope)
-        if (loader != null) {
-            val capabilities = capabilityFields(loader)
-            for (call in callsIn(project, scope, "ThingTemplateLoader", "type")) {
-                val arguments = call.argumentList.expressions
-                val type = constantString(arguments.getOrNull(0)) ?: continue
-                val record = classOf(arguments.getOrNull(1)) ?: continue
-                val engine = capabilities.filter { (capability, _) -> InheritanceUtil.isInheritorOrSelf(record, capability, true) }.values.flatten()
-                val game = arguments.getOrNull(2)?.let(::fieldsOf).orEmpty()
-                put(BlockSpec(type, 1, (engine + game).distinctBy { it.name.lowercase() }, template = true))
-            }
         }
         return DukeSchema(specs.values.sortedBy { it.type.lowercase() })
     }
@@ -142,23 +120,6 @@ object DukeSchemas {
             PsiTreeUtil.findChildrenOfType(file, PsiMethodCallExpression::class.java).filter { it.methodExpression.referenceName == method }
         }
     }
-
-    /** The engine fields each capability grants a template block, read off `ThingTemplateLoader.engineFields`. */
-    private fun capabilityFields(loader: PsiClass): Map<PsiClass, List<FieldSpec>> {
-        val source = loader.navigationElement as? PsiClass ?: return emptyMap()
-        val method = source.findMethodsByName("engineFields", false).firstOrNull() ?: return emptyMap()
-        val fields = LinkedHashMap<PsiClass, List<FieldSpec>>()
-        for (branch in PsiTreeUtil.findChildrenOfType(method, PsiIfStatement::class.java)) {
-            val test = branch.condition as? PsiMethodCallExpression ?: continue
-            if (test.methodExpression.referenceName != "isAssignableFrom") continue
-            val capability = classOf(test.methodExpression.qualifierExpression) ?: continue
-            fields[capability] = fieldsIn(branch.thenBranch ?: continue)
-        }
-        return fields
-    }
-
-    private fun classOf(expression: PsiElement?): PsiClass? =
-        ((expression as? PsiClassObjectAccessExpression)?.operand?.type as? PsiClassType)?.resolve()
 
     /** The key a block parser is registered under: the argument before it in `entry("X", parser)`. */
     private fun blockTypesOf(parser: PsiElement): List<String> = when (parser) {

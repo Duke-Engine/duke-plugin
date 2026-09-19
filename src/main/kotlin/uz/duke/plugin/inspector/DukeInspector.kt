@@ -1,7 +1,6 @@
 package uz.duke.plugin.inspector
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.DataManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -20,7 +19,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
-import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -55,7 +53,6 @@ import com.intellij.util.ui.UIUtil
 import uz.duke.plugin.DukeBundle.message
 import uz.duke.plugin.engine.FieldKind
 import uz.duke.plugin.engine.FieldSpec
-import uz.duke.plugin.ini.DukeIniBlock
 import uz.duke.plugin.ini.DukeIniEdits
 import uz.duke.plugin.ini.DukeIniField
 import uz.duke.plugin.ini.DukeIniFileType
@@ -101,7 +98,7 @@ class DukeInspectorOpener(private val project: Project) : FileEditorManagerListe
 
 /**
  * The selected INI file as a form: each block a section, each field an editor that suits its value,
- * each module of an `Object` a section of its own. Every change is written into the file as text,
+ * each section inside a block a section of its own. Every change is written into the file as text,
  * and the form is read again from the file after it; the file stays the truth.
  */
 class DukeInspectorPanel(private val project: Project, private val window: ToolWindow) : SimpleToolWindowPanel(true, true), Disposable {
@@ -118,7 +115,6 @@ class DukeInspectorPanel(private val project: Project, private val window: ToolW
     init {
         Disposer.register(window.disposable, this)
         val actions = DefaultActionGroup().apply {
-            ActionManager.getInstance().getAction("Duke.NewUnit")?.let(::add)
             add(object : DumbAwareAction(message("inspector.add.block"), null, AllIcons.General.Add) {
                 override fun actionPerformed(e: AnActionEvent) = addBlock(e.inputEvent?.component as? JComponent ?: this@DukeInspectorPanel)
             })
@@ -209,20 +205,6 @@ class DukeInspectorPanel(private val project: Project, private val window: ToolW
             column.add(section.component)
             view to section
         }
-        if (model.suggestions.isNotEmpty()) {
-            column.add(hideable("missing", message("inspector.missing"), true) {
-                panel {
-                    for (suggestion in model.suggestions) row { link("+ ${suggestion.label}") { addSuggested(suggestion) } }
-                }
-            }.component)
-        }
-        if (model.elsewhere.isNotEmpty()) {
-            column.add(hideable("elsewhere", message("inspector.elsewhere"), true) {
-                panel {
-                    for (place in model.elsewhere) row { link(place.label) { OpenFileDescriptor(project, place.file, place.offset).navigate(true) } }
-                }
-            }.component)
-        }
     }
 
     /** A section that folds: its own panel, so the caret can bring it into view. */
@@ -258,12 +240,7 @@ class DukeInspectorPanel(private val project: Project, private val window: ToolW
         }
         row {
             link(message("inspector.add.field")) { addField(view, it.source as JComponent) }
-            if (view.takesModules) link(message("inspector.add.module")) { addModule(view, model, it.source as JComponent) }
-            link(message(when {
-                view.sectionType.startsWith("module ") -> "inspector.remove.module"
-                '/' in view.sectionType -> "inspector.remove.section"
-                else -> "inspector.remove.block"
-            })) {
+            link(message(if ('/' in view.sectionType) "inspector.remove.section" else "inspector.remove.block")) {
                 remove(view.section, view.title)
             }
         }
@@ -369,64 +346,11 @@ class DukeInspectorPanel(private val project: Project, private val window: ToolW
             ?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun addModule(view: SectionView, model: InspectorModel, anchor: JComponent) {
-        if (model.modules.isEmpty()) {
-            Messages.showInfoMessage(project, message("engine.not.found"), message("inspector.add.module"))
-            return
-        }
-        val menu = DefaultActionGroup()
-        for ((group, choices) in model.modules) {
-            val sub = DefaultActionGroup(group, true)
-            for (choice in choices) {
-                sub.add(object : DumbAwareAction(choice.name) {
-                    override fun actionPerformed(e: AnActionEvent) = addModule(view, model, choice)
-                })
-            }
-            menu.add(sub)
-        }
-        JBPopupFactory.getInstance().createActionGroupPopup(
-            message("inspector.add.module"), menu, DataManager.getInstance().getDataContext(anchor),
-            JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true,
-        ).showUnderneathOf(anchor)
-    }
-
-    private fun addModule(view: SectionView, model: InspectorModel, choice: ModuleChoice) {
-        var name = choice.name
-        if (choice.isPrefix) {
-            // A script is registered by the game under a name; offer the unit's own by the files' habit first.
-            val unit = view.title.substringAfter(' ', "")
-            val used = model.index.moduleNames(choice.name).map { it.removePrefix(choice.name) }
-            val own = model.index.nameSuffix(choice.name)?.let { unit + it }
-            val options = listOfNotNull(own).plus(used).distinct().toTypedArray()
-            val picked = Messages.showEditableChooseDialog(
-                message("inspector.script.prompt"), message("inspector.add.module"), null, options, options.firstOrNull() ?: "", null,
-            )?.trim()?.removePrefix(choice.name)?.takeIf { it.isNotEmpty() } ?: return
-            name = choice.name + picked
-        }
-        edit(message("inspector.command.add", name)) { document ->
-            (view.section.element as? DukeIniBlock)?.let { DukeIniEdits.addModule(document, it, choice.key, name, choice.fields) }
-        }
-    }
-
-    private fun addSuggested(suggestion: Suggestion) {
-        var header = "${suggestion.type} ${suggestion.name}"
-        suggestion.secondNames?.let { names ->
-            val second = Messages.showEditableChooseDialog(
-                message("inspector.second.prompt", suggestion.type), message("inspector.add.block"), null,
-                names.toTypedArray(), names.firstOrNull() ?: "", null,
-            )?.trim()?.takeIf { it.isNotEmpty() && ' ' !in it } ?: return
-            header += " $second"
-        }
-        edit(message("inspector.command.add", header)) { document -> DukeIniEdits.addBlock(document, header, suggestion.fields) }
-    }
-
     private fun addBlock(anchor: JComponent) {
         val model = model ?: return
-        val types = listOf(uz.duke.plugin.ini.DukeIniProject.OBJECT) + model.blockTypes.map { it.type }.filter { !it.equals("Object", ignoreCase = true) }
-        choose(anchor, types.distinct()) { type ->
-            val unit = model.sections.firstOrNull { it.takesModules }?.title?.substringAfter(' ', "").orEmpty()
+        choose(anchor, model.blockTypes.map { it.type }.distinct()) { type ->
             val names = Messages.showInputDialog(
-                project, message("inspector.block.prompt", type), message("inspector.add.block"), null, unit, null,
+                project, message("inspector.block.prompt", type), message("inspector.add.block"), null, "", null,
             )?.trim() ?: return@choose
             val header = "$type $names".trim()
             edit(message("inspector.command.add", header)) { document ->

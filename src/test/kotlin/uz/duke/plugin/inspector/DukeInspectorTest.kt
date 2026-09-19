@@ -18,23 +18,8 @@ class DukeInspectorTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         myFixture.addFileToProject(
-            "content.ini",
+            "settings/monsters.ini",
             """
-            |DungeonContent Files
-            |  File = units/skeleton.ini
-            |  File = units/rogue.ini
-            |  File = effects/fire.ini
-            |End
-            |""".trimMargin(),
-        )
-        myFixture.addFileToProject(
-            "units/skeleton.ini",
-            """
-            |Object Skeleton
-            |  VisionRange = 45
-            |  Update = Script:SkeletonBrain Tag
-            |  End
-            |End
             |DungeonMonster Skeleton
             |  Weight = 10
             |  Look = Fire
@@ -46,13 +31,8 @@ class DukeInspectorTest : BasePlatformTestCase() {
             |""".trimMargin(),
         )
         myFixture.addFileToProject(
-            "units/rogue.ini",
+            "settings/heroes.ini",
             """
-            |Object Rogue
-            |  VisionRange = 60
-            |  Update = Script:HeroBrain Tag
-            |  End
-            |End
             |DungeonHero Rogue
             |  Title = Archer
             |End
@@ -66,7 +46,7 @@ class DukeInspectorTest : BasePlatformTestCase() {
             |End
             |""".trimMargin(),
         )
-        myFixture.addFileToProject("effects/fire.ini", "DungeonEffect Fire\nEnd\nDungeonEffect Ice\nEnd\n")
+        myFixture.addFileToProject("settings/effects.ini", "DungeonEffect Fire\nEnd\nDungeonEffect Ice\nEnd\n")
     }
 
     fun testWhatAFieldNamesIsReadFromTheFiles() {
@@ -75,55 +55,33 @@ class DukeInspectorTest : BasePlatformTestCase() {
         assertEquals("DungeonEffect", index.referenceOf("dungeonmonster", "look"))
         assertNull(index.referenceOf("dungeonskill", "damage"))
         assertEquals(listOf("Channel" to "Effects", "File" to "ouch.ogg"), index.defaults("dungeonsound"))
-        assertEquals("Brain", index.nameSuffix("Script:"))
-        assertEquals("File", index.manifest?.second)
-    }
-
-    fun testAUnitIsOfferedWhatUnitsLikeItHave() {
-        val index = DukeIniProject.of(project)
-        assertEquals(listOf("DungeonHero", "DungeonMonster"), index.companions)
-        assertEquals(listOf("DungeonSkill"), index.pointers)
-        assertEquals(mapOf("DungeonSound" to listOf("died", "hurt")), index.moments)
-        // A monster: no other block goes with a DungeonMonster, no monster has a skill, and it cannot be hurt aloud yet.
-        assertEquals(listOf("DungeonSound hurt"), InspectorModels.suggestionsFor("Skeleton", index).map { it.label })
-        // A unit with nothing yet is offered everything.
-        assertEquals(
-            listOf("DungeonHero", "DungeonMonster", "DungeonSkill …", "DungeonSound died", "DungeonSound hurt"),
-            InspectorModels.suggestionsFor("Goblin", index).map { it.label },
-        )
     }
 
     fun testAFieldThatNamesABlockIsPickedFromTheBlocks() {
-        val file = PsiManager.getInstance(project).findFile(myFixture.findFileInTempDir("units/rogue.ini")) as DukeIniFile
-        val model = InspectorModels.build(file)
-        val look = model.sections.first { it.title == "DungeonSkill Rogue Q" }.fields.first { it.key == "Look" }
+        val file = PsiManager.getInstance(project).findFile(myFixture.findFileInTempDir("settings/heroes.ini")) as DukeIniFile
+        val look = InspectorModels.build(file).sections.first { it.title == "DungeonSkill Rogue Q" }.fields.first { it.key == "Look" }
         assertEquals(ValueEditor.Choice(listOf("Fire", "Ice"), true), look.editor)
-        assertEquals(listOf("DungeonSkill …", "DungeonSound died", "DungeonSound hurt"), model.suggestions.map { it.label })
     }
 
     fun testEditsLeaveTheRestOfTheFileAlone() {
         val file = myFixture.configureByText(
-            "goblin.ini", "Object Goblin\n  Speed = 1 ; fast\n  Update = MoveUpdate Tag\n    Speed = 10\n  End\nEnd\n",
+            "world.ini", "World Dungeon\n  Speed = 1 ; fast\n  Generation = Layout\n    MapWidth = 10\n  End\nEnd\n",
         ) as DukeIniFile
         write { DukeIniEdits.setValue(it, file.blocks.single().fields.single(), "2") }
-        assertEquals("Object Goblin\n  Speed = 2 ; fast\n  Update = MoveUpdate Tag\n    Speed = 10\n  End\nEnd\n", file.text)
+        assertEquals("World Dungeon\n  Speed = 2 ; fast\n  Generation = Layout\n    MapWidth = 10\n  End\nEnd\n", file.text)
 
         write { DukeIniEdits.addField(it, file.blocks.single(), "Scale", "1.5") }
-        write { DukeIniEdits.addField(it, file.blocks.single().modules.single(), "TurnRate", "0") }
-        write { DukeIniEdits.addModule(it, file.blocks.single(), "Body", "ActiveBody", listOf("MaxHealth" to "50")) }
+        write { DukeIniEdits.addField(it, file.blocks.single().parts.single(), "MapHeight", "8") }
         write { DukeIniEdits.addBlock(it, "DungeonMonster Goblin", listOf("Weight" to "5")) }
         write { DukeIniEdits.remove(it, file.blocks.first().fields.first()) }
         assertEquals(
             """
-            |Object Goblin
-            |  Update = MoveUpdate Tag
-            |    Speed = 10
-            |    TurnRate = 0
+            |World Dungeon
+            |  Generation = Layout
+            |    MapWidth = 10
+            |    MapHeight = 8
             |  End
             |  Scale = 1.5
-            |  Body = ActiveBody Tag
-            |    MaxHealth = 50
-            |  End
             |End
             |
             |DungeonMonster Goblin
@@ -134,7 +92,7 @@ class DukeInspectorTest : BasePlatformTestCase() {
         )
     }
 
-    /** A block's sections are shown under it as its modules are, each with its own fields, and a new one gets its own End. */
+    /** A block's sections are shown under it, each with its own fields, and a new one gets its own End. */
     fun testSectionsAreShownUnderTheirBlockAndAdded() {
         val file = myFixture.configureByText("world.ini", "World Dungeon\n  LevelHeight = 10\n  Generation = Layout\n    MapWidth = 50\n  End\nEnd\n") as DukeIniFile
         val world = InspectorModels.build(file).sections.single()
@@ -158,59 +116,6 @@ class DukeInspectorTest : BasePlatformTestCase() {
         val glb = ByteBuffer.allocate(20 + bytes.size).order(ByteOrder.LITTLE_ENDIAN)
             .putInt(0x46546C67).putInt(2).putInt(20 + bytes.size).putInt(bytes.size).putInt(0x4E4F534A).put(bytes).array()
         assertEquals(listOf("Idle", "Attack_1"), DukeClips.animationNames(DukeClips.glbJson(ByteArrayInputStream(glb))!!))
-    }
-
-    fun testACopyIsRenamedWhereTheNameIsTheUnits() {
-        val copy = NewUnit.copyOf(
-            """
-            |; The skeleton, and not the SkeletonMage.
-            |Object Skeleton
-            |  DisplayName = Bony
-            |  Update = Script:SkeletonBrain Tag
-            |  End
-            |  Summons = SkeletonMage
-            |End
-            |DungeonSkill Skeleton Q ; its only skill
-            |End
-            |DungeonSound died.Skeleton
-            |End
-            |""".trimMargin(),
-            "Skeleton", "Goblin",
-        )
-        assertEquals(
-            """
-            |; The skeleton, and not the SkeletonMage.
-            |Object Goblin
-            |  DisplayName = Goblin
-            |  Update = Script:GoblinBrain Tag
-            |  End
-            |  Summons = SkeletonMage
-            |End
-            |DungeonSkill Goblin Q ; its only skill
-            |End
-            |DungeonSound died.Goblin
-            |End
-            |""".trimMargin(),
-            copy,
-        )
-        assertEquals("skeleton_archer.ini", NewUnit.fileName("SkeletonArcher"))
-    }
-
-    fun testANewUnitIsListedAfterTheUnitsBesideIt() {
-        val index = DukeIniProject.of(project)
-        val goblin = myFixture.tempDirFixture.createFile("units/goblin.ini", "Object Goblin\nEnd\n")
-        WriteCommandAction.runWriteCommandAction(project) { NewUnit.list(project, index, goblin) }
-        assertEquals(
-            """
-            |DungeonContent Files
-            |  File = units/skeleton.ini
-            |  File = units/rogue.ini
-            |  File = units/goblin.ini
-            |  File = effects/fire.ini
-            |End
-            |""".trimMargin(),
-            PsiManager.getInstance(project).findFile(myFixture.findFileInTempDir("content.ini"))!!.text,
-        )
     }
 
     private fun write(edit: (Document) -> Unit) = WriteCommandAction.runWriteCommandAction(project) {

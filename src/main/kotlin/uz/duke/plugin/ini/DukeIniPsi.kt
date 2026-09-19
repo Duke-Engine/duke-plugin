@@ -26,16 +26,16 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.IncorrectOperationException
 import uz.duke.plugin.ini.DukeIniTypes as T
 
-/** A block, a unit's module or a section inside a block: a first line, fields, and (if closed) an End. */
+/** A block or a section inside a block: a first line, fields, and (if closed) an End. */
 abstract class DukeIniSection(node: ASTNode) : ASTWrapperPsiElement(node) {
     val isClosed: Boolean
         get() = node.findChildByType(T.END) != null
 
-    /** Its own fields; a module's are inside the module. */
+    /** Its own fields; a section's are inside the section. */
     val fields: List<DukeIniField>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniField::class.java)
 
-    /** Its modules and sections, in the order written. */
+    /** Its sections, in the order written. */
     val parts: List<DukeIniSection>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniSection::class.java)
 
@@ -53,10 +53,10 @@ abstract class DukeIniSection(node: ASTNode) : ASTWrapperPsiElement(node) {
             return TextRange(textRange.startOffset, end)
         }
 
-    /** The first line as written, spacing normalised: `Object Rogue`, `Update = MoveUpdate Tag`. */
+    /** The first line as written, spacing normalised: `World Dungeon`, `Generation = Layout`. */
     abstract val presentableText: String
 
-    /** What kind of section this is, lower case: `hero`, `module moveupdate`, `world/generation`. */
+    /** What kind of section this is, lower case: `world`, `world/generation`. */
     abstract val sectionType: String
 
     override fun getPresentation(): ItemPresentation = PresentationData(presentableText, null, getIcon(0), null)
@@ -68,9 +68,6 @@ class DukeIniBlock(node: ASTNode) : DukeIniSection(node), PsiNameIdentifierOwner
 
     val blockType: String
         get() = header.blockType
-
-    val modules: List<DukeIniModule>
-        get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeIniModule::class.java)
 
     override val presentableText: String
         get() = header.words.joinToString(" ")
@@ -91,32 +88,6 @@ class DukeIniBlock(node: ASTNode) : DukeIniSection(node), PsiNameIdentifierOwner
         if (blockType.equals("Object", ignoreCase = true)) AllIcons.Nodes.Class else AllIcons.Json.Object
 }
 
-class DukeIniModule(node: ASTNode) : DukeIniSection(node) {
-    /** `MoveUpdate` in `Update = MoveUpdate Tag`; null while the line has no name yet. */
-    val moduleName: DukeIniModuleName?
-        get() = PsiTreeUtil.getChildOfType(this, DukeIniModuleName::class.java)
-
-    override val presentableText: String
-        get() {
-            val words = node.getChildren(null).takeWhile { it.elementType != T.FIELD_ELEMENT && it.elementType != T.END }
-                .filter { it.elementType in LINE_WORDS }.map { it.text }
-            return (listOf(words.first(), "=") + words.drop(1)).joinToString(" ")
-        }
-
-    override val sectionType: String
-        get() = "module " + moduleName?.text.orEmpty().lowercase()
-
-    /** `Update` in `Update = MoveUpdate Tag`. */
-    val moduleKey: String
-        get() = firstChild.text
-
-    override fun getIcon(flags: Int) = AllIcons.Nodes.Plugin
-
-    private companion object {
-        val LINE_WORDS = TokenSet.create(T.MODULE_KEY, T.MODULE_NAME_ELEMENT, T.VALUE, T.NUMBER, T.STRING)
-    }
-}
-
 /** A section inside a block — `Generation = Layout`, its fields, its End — as a game's `World` block holds them. */
 class DukeIniSubsection(node: ASTNode) : DukeIniSection(node) {
     /** `Generation` in `Generation = Layout`. */
@@ -135,12 +106,6 @@ class DukeIniSubsection(node: ASTNode) : DukeIniSection(node) {
         get() = (parent as? DukeIniSection)?.sectionType.orEmpty() + "/" + key.lowercase()
 
     override fun getIcon(flags: Int) = AllIcons.Nodes.Folder
-}
-
-/** Points at the engine class the module is built from; see [DukeModuleReference]. */
-class DukeIniModuleName(node: ASTNode) : ASTWrapperPsiElement(node) {
-    override fun getReference(): PsiReference = DukeModuleReference(this)
-    override fun getReferences(): Array<PsiReference> = arrayOf(reference)
 }
 
 class DukeIniHeader(node: ASTNode) : ASTWrapperPsiElement(node) {
@@ -236,10 +201,10 @@ object DukeIniDeclarations {
 class DukeIniFindUsagesProvider : FindUsagesProvider {
     override fun getWordsScanner(): WordsScanner =
         object : DefaultWordsScanner(
-            DukeIniLexer(), TokenSet.create(T.NAME, T.VALUE, T.MODULE_NAME), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING),
+            DukeIniLexer(), TokenSet.create(T.NAME, T.VALUE), TokenSet.create(T.COMMENT), TokenSet.create(T.STRING),
         ) {
-            // Module names joined the word index in version 1: Find Usages and Rename of a module class reach INI files.
-            override fun getVersion() = 1
+            // Module names left the word index in version 2, with the modules.
+            override fun getVersion() = 2
         }
 
     override fun canFindUsagesFor(element: PsiElement) = element is DukeIniBlock && element.name != null
