@@ -1,6 +1,7 @@
 package uz.duke.plugin.duke
 
 import com.intellij.lang.java.JavaLanguage
+import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
@@ -99,14 +100,25 @@ object DukeRecords {
     private fun targetOf(record: PsiClass, type: PsiClass): PsiElement =
         record.containingClass?.takeIf { type.isInterface && !isSealed(type) } ?: record
 
-    /** A block at the top of a file: what a loader registers under [word], else the record of that name. */
+    /**
+     * A block at the top of a file: what a loader registers under [word], else the record of that name.
+     * A game and the engine it is built on may both have one — a game's `Fog` beside the client's — so
+     * the game's own is taken first, then the one that has the keys the block writes, then a top-level
+     * one over a nested one.
+     */
     fun topLevel(context: PsiElement, word: String): DukeShape? {
         registered(context)[word.lowercase()]?.firstOrNull()?.let { return DukeShape.Record(it, it) }
         val names = PsiShortNamesCache.getInstance(context.project)
+        val own = ModuleUtilCore.findModuleForPsiElement(context)?.let(GlobalSearchScope::moduleScope)
+        val keys = (context as? DukeBlock)?.fields?.map { it.key }.orEmpty()
         val record = listOf(word, word.replaceFirstChar(Char::uppercaseChar)).distinct()
             .flatMap { names.getClassesByName(it, context.resolveScope).asList() }
             .filter { it.isRecord }
-            .minByOrNull { if (it.containingClass == null) 0 else 1 } ?: return null
+            .minWithOrNull(compareBy<PsiClass>(
+                { if (own != null && PsiUtil.getVirtualFile(it)?.let(own::contains) == true) 0 else 1 },
+                { candidate -> keys.count { component(candidate, it) == null } },
+                { if (it.containingClass == null) 0 else 1 },
+            )) ?: return null
         return DukeShape.Record(record, record)
     }
 

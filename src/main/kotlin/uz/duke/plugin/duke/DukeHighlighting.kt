@@ -203,8 +203,14 @@ class DukeEngineAnnotator : Annotator {
         when (val shape = DukeRecords.shapeOf(block)) {
             is DukeShape.Record -> {
                 val component = DukeRecords.component(shape.record, field.key)
-                if (component == null) holder.error(field.keyElement, "duke.no.field", block.wordText, field.key)
-                else value(field, component.type, holder)
+                if (component == null) {
+                    holder.error(field.keyElement, "duke.no.field", block.wordText, field.key)
+                    return
+                }
+                value(field, component.type, holder)
+                val link = DukeLinks.linkOf(component) ?: return
+                val named = field.value ?: return
+                if (named.unquoted !in DukeLinks.blocksOf(link, field)) holder.error(named, "duke.no.link", link.name.orEmpty(), named.unquoted)
             }
             is DukeShape.Entries -> {
                 DukeRecords.typeArgument(shape.component.type, 0)?.let { type ->

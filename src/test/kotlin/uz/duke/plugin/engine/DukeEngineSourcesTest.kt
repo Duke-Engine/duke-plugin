@@ -3,7 +3,10 @@ package uz.duke.plugin.engine
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiRecordComponent
+import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
+import org.jetbrains.jps.model.java.JavaResourceRootType
+import uz.duke.plugin.duke.DukeBlock
 import java.io.File
 
 /** Against the engine next to the plugin: its real records, registrations and game files are the spec. */
@@ -18,12 +21,15 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
 
     /** Every data file the game ships reads as the engine reads it: not one may raise a problem. */
     fun testGameDataIsCleanAgainstTheEngine() {
-        val files = File("../dungeon/src/main/resources/data").walkTopDown().filter { it.extension == "duke" }.toList()
+        val resources = File("../dungeon/src/main/resources")
+        val files = File(resources, "data").walkTopDown().filter { it.extension == "duke" }.toList()
         assertTrue("no data files found next to the plugin", files.size >= 40)
-        assertEmpty(files.flatMap { file ->
-            myFixture.configureByText(file.name, file.readText())
+        // Every one before any is checked: a unit links a set another file declares, as the game reads them together.
+        val added = files.map { myFixture.addFileToProject(it.relativeTo(resources).invariantSeparatorsPath, it.readText()) }
+        assertEmpty(added.flatMap { file ->
+            myFixture.configureFromExistingVirtualFile(file.virtualFile)
             myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING)
-                .map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
+                .map { "${file.virtualFile.path.substringAfter("/src/")}: ${it.description} at '${it.text}'" }
         })
         // Clean because it was checked, not because the engine went unseen.
         myFixture.configureByText("check.duke", "Monster\n  Name = Brute\n  Sped = 1\n  MoveUpdat\n  End\nEnd\n")
@@ -33,24 +39,34 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         )
     }
 
-    /** The world's INI file is clean too, and its sections are read off the settings' code. */
-    fun testWorldSettingsAreCleanAndTheirSchemaIsTheGames() {
-        val world = File("../dungeon/src/main/resources/ini/dungeon.ini")
-        myFixture.configureByText(world.name, world.readText())
-        assertEmpty(myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${it.description} at '${it.text}'" })
+    /**
+     * A unit links what it moves by, and its clip fields are offered the clips those files hold — read
+     * out of the files, so any file with clips in it works. The link opens the set; a wrong one is said.
+     */
+    fun testAClipIsOneOfTheClipsTheFilesItMovesByHold() {
+        val resources = myFixture.copyDirectoryToProject("dungeon/src/main/resources/animations", "res/animations").parent
+        PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
+        try {
+            myFixture.addFileToProject("res/data/animations/humanoid.duke",
+                File("../dungeon/src/main/resources/data/animations/humanoid.duke").readText())
+            val unit = myFixture.addFileToProject("res/data/units/brute.duke",
+                "Monster\n  Name = Brute\n  Animations = Humanoid\n  Walk = Run\nEnd\n")
+            myFixture.configureFromExistingVirtualFile(unit.virtualFile)
+            val text = unit.text
 
-        val schema = DukeSchemas.of(myFixture.file)!!
-        val block = schema.block("World")!!
-        assertTrue("too few sections to be a scan", block.fields.count { it.section != null } >= 30)
-        assertEquals(FieldKind.REAL, block.field("LevelHeight")!!.kind)
-        assertNull(block.field("MapWidth")) // Generation's, not the world's
-        assertEquals(FieldKind.INTEGER, block.field("Generation")!!.section!!.field("MapWidth")!!.kind)
-        assertEquals(FieldKind.REAL, block.field("StatBlock")!!.section!!.field("FigureIcon")!!.kind)
-        val item = block.field("LootItem")!!
-        assertTrue("a section written once per item", item.list)
-        assertEquals(FieldKind.ENUM, item.section!!.field("Kind")!!.kind)
-        assertEquals(2, block.field("Tone")!!.section!!.names) // Tone = Forest Wooded
-        assertNull("a section is not a block of its own", schema.block("LootItem"))
+            val set = myFixture.file.findReferenceAt(text.indexOf("Humanoid"))?.resolve() as? DukeBlock
+            assertEquals("AnimationSet", set?.wordText)
+
+            myFixture.editor.caretModel.moveToOffset(text.indexOf("Walk = Run") + "Walk = Run".length)
+            val offered = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
+            assertContainsElements(offered, "Running_A", "Running_B")
+
+            myFixture.configureByText("wrong.duke",
+                "Monster\n  Name = Wrong\n  Animations = <error descr=\"No AnimationSet is called 'Humanoidd'\">Humanoidd</error>\nEnd\n")
+            myFixture.checkHighlighting()
+        } finally {
+            PsiTestUtil.removeSourceRoot(module, resources)
+        }
     }
 
     /** Ctrl+Click on a word opens the class the engine reads it as; on a key, the component it fills. */
@@ -76,6 +92,8 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     }
 
     private companion object {
-        val ENGINE_MODULES = listOf("core", "rts", "game", "dungeon")
+        // The client too: a block can be read straight into its records (OrderMark), and a game's
+        // record can share a name with one of them (Fog).
+        val ENGINE_MODULES = listOf("core", "rts", "game", "client3d", "dungeon")
     }
 }

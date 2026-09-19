@@ -21,6 +21,16 @@
   a list never closed. A header written `Monster Brute` is fixed to `Monster` with `Name = Brute` inside it.
 - Renaming a module class, a record component or an enum constant renames it in the data files.
 - `.duke` paths, as a manifest lists them, checked and opened like asset paths.
+- Links between blocks: a component marked `@Link(AnimationSet.class)` names a block of that record —
+  `Animations = Humanoid` — so its value is completed from the blocks there are, opened by Ctrl+Click, and flagged
+  when no block is called that.
+- Clip names completed: a component marked `@Clip` — `Walk`, `Idle`, a portrait's clips, a skill's `CastAnim` — is
+  offered the clips inside the model and animation files the block is drawn from, and those of the set it links, read
+  out of the files themselves.
+- A misindented value: the line under `Effect = EmberEyes` indented by mistake is flagged on that field, where the
+  engine says it, rather than as the block around it having no `End`.
+- A block's word that a game's record shares with an engine one (a game's `Fog` beside the client's) opens the
+  game's own, else the one whose fields the block writes.
 
 ### Removed
 

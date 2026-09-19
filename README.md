@@ -50,10 +50,14 @@ End
 - **Navigation:** Ctrl+Click a key to open the record component it is — `Geometry`, `Modules`, `Speed` — and a
   class to the class: `Monster` its record, `Object` what the game's template loader registers (`RtsTemplate`),
   `Cylinder` the shape of a `Geometry`, `MoveUpdate` the module's class, `Skill` the record a list of skills
-  holds. Ctrl+Click an enum value to its constant.
+  holds. Ctrl+Click an enum value to its constant, and a link — `Animations = Humanoid` — to the block it names.
 - **Completion:** on a line being begun, the keys the record has not been given (written with ` = `) and its
   maps; after `Key = `, the classes the field may be, an enum's constants, `Yes`/`No`, or files; inside a list of
   records, the classes it holds, each written with its `End`.
+- **Links and clips**, as the game's records mark them: a component marked `@Link(AnimationSet.class)` is offered
+  the names of the blocks of that record there are, and a wrong one is flagged; one marked `@Clip` — `Walk = ` — is
+  offered the clips inside the model and animation files the block is drawn from and those of the set it links,
+  read out of the `.glb`/`.gltf` files themselves, so a file that gains a clip offers it at once.
 - **Checks**, each in the engine's own words, so what the editor says is what the game would say at load:
   - syntax, as `DukeText` reads it: a block with no `End`, an `End` with nothing open, a key written twice, a
     list never closed, an empty item or a missing comma in a list, a line in a list of records that is not a

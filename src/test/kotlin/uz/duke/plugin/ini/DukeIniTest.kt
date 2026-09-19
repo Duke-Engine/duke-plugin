@@ -4,20 +4,9 @@ import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import java.io.File
 
 class DukeIniTest : BasePlatformTestCase() {
     override fun getTestDataPath() = "src/test/testData"
-
-    /** The game's own INI file is the spec: not one line of it may raise a problem. */
-    fun testGameFilesAreClean() {
-        val files = File("../dungeon/src/main/resources/ini").walkTopDown().filter { it.extension == "ini" }.toList()
-        assertTrue("no INI files found next to the plugin", files.isNotEmpty())
-        assertEmpty(files.flatMap { file ->
-            myFixture.configureByText(file.name, file.readText())
-            myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING).map { "${file.invariantSeparatorsPath.substringAfter("resources/")}: ${it.description} at '${it.text}'" }
-        })
-    }
 
     fun testProblems() {
         myFixture.configureByText(

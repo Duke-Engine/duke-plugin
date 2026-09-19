@@ -90,6 +90,7 @@ class DukeChoiceReference(value: DukeValue, private val type: PsiClass) :
 object DukeValueReferences {
     fun of(value: DukeValue): Array<PsiReference> {
         if (AssetKind.of(value.unquoted) != null) return arrayOf(DukeFileReference(value))
+        DukeLinks.componentOf(value)?.let(DukeLinks::linkOf)?.let { return arrayOf(DukeLinkReference(value, it)) }
         val type = typeOf(value) ?: return PsiReference.EMPTY_ARRAY
         if (DukeRecords.constantsOf(type) != null) return arrayOf(DukeConstantReference(value, type))
         val choice = DukeRecords.classOf(type)?.takeIf(DukeRecords::isChoosable) ?: return PsiReference.EMPTY_ARRAY

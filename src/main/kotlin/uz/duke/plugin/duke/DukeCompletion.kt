@@ -55,7 +55,21 @@ class DukeCompletionContributor : CompletionContributor() {
             // A word being begun in an empty `Modules = [` reads as a value until it has a body: offer the blocks.
             value.field?.let { choices(it, result, closing = value.isInList) }
             assets(value, result)
+            linksAndClips(value, result)
         })
+    }
+
+    /** The names a linking field may be — the blocks of its record there are — and the clips a clip may be. */
+    private fun linksAndClips(value: DukeValue, result: CompletionResultSet) {
+        val component = DukeLinks.componentOf(value) ?: return
+        DukeLinks.linkOf(component)?.let { record ->
+            for (name in DukeLinks.blocksOf(record, value).keys.sorted()) {
+                result.addElement(LookupElementBuilder.create(name).withTypeText(record.name))
+            }
+        }
+        if (!DukeLinks.isClip(component)) return
+        val block = value.field?.block ?: return
+        for (clip in DukeLinks.clipsFor(block)) result.addElement(LookupElementBuilder.create(clip).withTypeText("clip"))
     }
 
     /** The keys the record has not been given, and its maps not yet written. */

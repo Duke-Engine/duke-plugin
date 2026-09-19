@@ -19,6 +19,9 @@
                 the module class, <code>Cylinder</code> to the shape</li>
             <li>Keys and maps completed from the record the block is; after <code>=</code>, the classes the field may be, enum
                 constants, <code>Yes</code>/<code>No</code> and asset paths; inside a list of records, the records it holds</li>
+            <li>Links between blocks, as the records mark them: <code>Animations = Humanoid</code> completed from the blocks
+                there are, opened by Ctrl+Click and checked; clip names completed from the model and animation files a unit
+                is drawn from, read out of the files themselves</li>
             <li>Checked as the engine reads them: an unknown block or key, a value its type cannot read, a list where one
                 value goes, a key written twice, a block with no <code>End</code> — each said in the engine's own words</li>
             <li>A header written <code>Monster Brute</code> is fixed to <code>Monster</code> with <code>Name = Brute</code> inside</li>
