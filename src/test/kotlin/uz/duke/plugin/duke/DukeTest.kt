@@ -49,6 +49,23 @@ class DukeSyntaxTest : BasePlatformTestCase() {
         myFixture.checkHighlighting()
     }
 
+    /** A value with the line under it indented by mistake opens a block; it is flagged at the field, where the engine says it. */
+    fun testALineIndentedTooDeepIsFoundWhereItIs() {
+        myFixture.configureByText(
+            "brute.duke",
+            """
+            |Monster
+            |  Name = Brute
+            |  Effect = <error descr="'EmberEyes' has no End; if EmberEyes is a value, the line under 'Effect = EmberEyes' is indented too deep">EmberEyes</error>
+            |    ModelScale = 4.2
+            |  Walk = Running_A
+            |End
+            """.trimMargin(),
+        )
+        myFixture.checkHighlighting()
+        assertEquals(listOf("Name", "Effect", "Walk"), (myFixture.file as DukeFile).blocks.single().fields.map { it.key })
+    }
+
     fun testANamedHeaderIsFixedByMovingTheNameInside() {
         myFixture.configureByText("unit.duke", "Monster\n  <caret>Portrait Big\n    Yaw = 4\n  End\nEnd\n")
         myFixture.launchAction(myFixture.findSingleIntention("Move the name inside the block"))

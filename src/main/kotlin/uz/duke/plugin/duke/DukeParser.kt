@@ -35,16 +35,22 @@ class DukeParser : PsiParser {
     /** A word, or the class after a field's `=`, then the block's lines to its End. */
     private fun block(b: PsiBuilder) {
         val block = b.mark()
+        val base = if (b.tokenType == T.TYPE) indentAt(b) else -1
         val word = b.mark()
         b.advanceLexer()
         word.done(T.BLOCK_WORD)
         rest(b)
-        body(b)
+        body(b, base)
         block.done(T.BLOCK)
     }
 
-    private fun body(b: PsiBuilder) {
+    /**
+     * The lines to the End. A block after a field's `=` keeps to the depth that opened it, as `DukeText`
+     * reads it: a line back at [base], the field's own, that is not its End leaves it without one.
+     */
+    private fun body(b: PsiBuilder, base: Int) {
         while (!b.eof()) {
+            if (base >= 0 && indentAt(b).let { it < base || it == base && b.tokenType != T.END }) return
             when (b.tokenType) {
                 T.END -> {
                     line(b)
@@ -122,6 +128,16 @@ class DukeParser : PsiParser {
         val bad = b.mark()
         line(b)
         bad.done(T.BAD_LINE_ELEMENT)
+    }
+
+    /** Spaces and tabs before the code of the line the builder is on. */
+    private fun indentAt(b: PsiBuilder): Int {
+        val text = b.originalText
+        var start = b.currentOffset
+        while (start > 0 && text[start - 1] != '\n') start--
+        var end = start
+        while (end < text.length && (text[end] == ' ' || text[end] == '\t')) end++
+        return end - start
     }
 }
 

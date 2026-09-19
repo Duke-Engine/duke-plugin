@@ -67,7 +67,7 @@ class DukeSyntaxHighlighterFactory : SyntaxHighlighterFactory() {
 class DukeAnnotator : Annotator, DumbAware {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         when (element) {
-            is DukeBlock -> if (!element.isClosed) holder.error(element.word, "duke.no.end", element.wordText)
+            is DukeBlock -> if (!element.isClosed) noEnd(element, holder)
             is DukeField -> field(element, holder)
             is DukeList -> list(element, holder)
             is DukeBadLine -> badLine(element, holder)
@@ -76,6 +76,13 @@ class DukeAnnotator : Annotator, DumbAware {
                 T.BAD -> holder.error(element, if (element.text == "[") "duke.list.in.list" else "duke.after.value")
             }
         }
+    }
+
+    /** After a field's `=` the block may be a value whose next line was indented too deep by mistake. */
+    private fun noEnd(block: DukeBlock, holder: AnnotationHolder) {
+        val field = block.parent as? DukeField
+        if (field == null) holder.error(block.word, "duke.no.end", block.wordText)
+        else holder.error(block.word, "duke.no.end.value", block.wordText, field.key)
     }
 
     private fun field(field: DukeField, holder: AnnotationHolder) {
