@@ -1,4 +1,4 @@
-package uz.duke.plugin.ini
+package uz.duke.plugin.assets
 
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.InputStream

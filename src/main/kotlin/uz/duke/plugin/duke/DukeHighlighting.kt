@@ -25,8 +25,8 @@ import com.intellij.psi.PsiType
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
 import uz.duke.plugin.DukeBundle
-import uz.duke.plugin.ini.AssetKind
-import uz.duke.plugin.ini.DukeAssets
+import uz.duke.plugin.assets.AssetKind
+import uz.duke.plugin.assets.DukeAssets
 import uz.duke.plugin.duke.DukeTypes as T
 
 class DukeSyntaxHighlighter : SyntaxHighlighterBase() {
@@ -209,10 +209,16 @@ class DukeEngineAnnotator : Annotator {
                 }
                 value(field, component.type, holder)
                 val link = DukeLinks.linkOf(component) ?: return
-                val named = field.value ?: return
-                if (named.unquoted !in DukeLinks.blocksOf(link, field)) holder.error(named, "duke.no.link", link.name.orEmpty(), named.unquoted)
+                val names = DukeLinks.blocksOf(link, field)
+                for (named in field.values) {
+                    val name = DukeLinks.linkedName(component, named.unquoted)
+                    if (name !in names) holder.error(named, "duke.no.link", link.name.orEmpty(), name)
+                }
             }
             is DukeShape.Entries -> {
+                DukeLinks.linkOf(shape.component)?.let { link ->
+                    if (field.key !in DukeLinks.blocksOf(link, field)) holder.error(field.keyElement, "duke.no.link", link.name.orEmpty(), field.key)
+                }
                 DukeRecords.typeArgument(shape.component.type, 0)?.let { type ->
                     DukeRecords.problemOf(field.key, type, field.key)?.let { holder.plain(field.keyElement, it) }
                 }
@@ -295,7 +301,7 @@ class DukeAssetAnnotator : Annotator, DumbAware {
         val path = element.unquoted
         val kind = AssetKind.of(path) ?: return
         val root = DukeAssets.rootOf(element) ?: return
-        if (DukeAssets.find(root, path) == null) {
+        if (DukeAssets.resolve(element, path) == null) {
             val suggestion = DukeAssets.suggest(root, path)
             val message = if (suggestion == null) DukeBundle.message("asset.not.found", path)
             else DukeBundle.message("asset.not.found.suggest", path, suggestion)

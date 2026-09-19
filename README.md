@@ -6,8 +6,8 @@
 ## Overview
 
 An IntelliJ Platform plugin that lets the IDE read a Duke Engine game's content: its `.duke` data files — units,
-projectiles, effects, sounds — and the INI file of its world settings. What a block may hold is read from the
-game's own Java records, so the plugin knows no particular game.
+projectiles, effects, sounds, the world and its maps. What a block may hold is read from the game's own Java
+records, so the plugin knows no particular game.
 
 ## Features
 
@@ -90,26 +90,52 @@ extension (`.glb .gltf .obj .j3o`, `.png .jpg .jpeg .tga .dds`, `.ogg .wav .mp3`
 - **Navigation:** Ctrl+Click a path to open the file. Moving an asset does not update the lines; the check
   flags them instead.
 
-Outside a resource root (a loose file, an unexpected layout) paths are not checked or completed.
+A path is looked for under the file's own resource root first and then under the project's others, as the
+classpath finds it: the game's `kit/data/effects/fire/fireball.duke` is the kit's file. Outside a resource root (a loose file, an unexpected layout) paths are not checked or completed.
 
-### INI world settings
+### Duke Inspector
 
-A game's world settings are still one INI block, `World Dungeon`, until they are records too. Every `*.ini` file
-opens as **Duke INI** and gets highlighting, folding, a structure view, and checks for a block with no `End`,
-an `End` with no open block, and a line that is neither a header nor `Key = value`. A block may hold sections,
-`Generation = Layout` to an `End` of its own; which keys open one is the game's code, which the editor cannot
-see while it reads the text, so it goes by the layout.
+A tool window that shows the `.duke` block under the caret as a form, drawn from its record: the groups its
+components are marked with (`@Group("Look")`), and each field an editor by its type — a checkbox for `Yes`/`No`,
+a list for an enum, a colour picker for a colour, files of the right kind for a path, block names for a
+`@Link`, the clips of the files it moves by for a `@Clip`, a box for each number of a small record
+(`KeepDistance = [35, 55]`). A record inside another is its fields a step in; a list of blocks — modules,
+skills — is a card for each, moved up and down or taken out, with `+ Add` listing what the list may hold.
 
-**Duke Inspector** is a tool window that opens the first time an INI file is selected and shows it as a form:
-each block and section a group, and each field an editor by what it is — a checkbox for `Yes`/`No`, a list for
-an enum, files of the right kind for a path, block names for a field that names a block, clips for an animation.
-`+ Field` adds what the block's code reads that it does not write yet. The file stays the truth: every change is
-written into it as text, and Ctrl+Z undoes it. The sections and their fields are read from the game's code —
-every `initFromIni(x, TABLE)` and `TABLE`'s `add("Field", Ini.real(...))`.
+A field not written shows the record's default, from its `static final DEFAULTS`, and its help is the
+component's `@param` line. The file stays the truth: each change is written into it as text — a new line where
+the record puts it, before the comment over the next one — and Ctrl+Z undoes it. **New from Template** writes
+a new file from a record, or a copy of a block there is, and lists it in the game's `Files`.
+
+Above the form, a block with a `Model` is drawn as the game draws it — its `Texture`, its `Tint`, what it carries
+on a `Bone` — in a page of the IDE's own browser, with a button for each of its clip fields that plays that clip:
+written, or the one the set it links names. Picking a clip field in the form plays it too. Beside it, a button for
+each sound named for the block (`died.Skeleton` for the Skeleton), or for the block's own files when it is a sound.
+**Add Sound…** gives the block a sound for a moment the game's sounds are named for already — `died`, `hurt`,
+`spawned` — as a copy of the last sound for that moment, written after it, for its files to be changed.
+The page's files are served to the browser in-process; nothing listens on a port. It draws with
+[three.js](https://threejs.org) (MIT), taken out of its webjar when the plugin is built.
+
+### Map
+
+A `.duke` file whose block has a component marked `@Grid` — a map's rows of cells — opens with a **Map** tab
+beside its text: the cells from above, rock dark and floor lighter a storey up, the rooms outlined, and every
+thing on the map drawn where it stands. Things are read by the shape of the record: a component holding a record
+with an `x` and a `y` is a thing, or a list of them — `Entrance = [9, 28]`, `Boss = Warden 8 5`,
+`Monsters = [Skeleton 17 16, …]` — and the kinds a thing may be are the blocks its `@Link` names (the first word
+of `Warden 8 5` is the Monster it links). A click puts down what the tool says, a drag moves a thing, a right
+click takes one off, and a click on a thing makes it the tool. Each is a line of the file changed, one undoable
+command, and the Text tab shows it. A new map is drawn from a seed by the game — `./gradlew :dungeon:newMap
+--args="crypt 42"` — and filled here.
+
+**Play** (▶ on the Map tab, and in the Inspector) saves every file and runs the game's own Gradle `run` task in
+the Run window, told the map being edited by its file — `--args=--map=src/main/resources/data/maps/first.duke` —
+or from its start for any other block. The game reads the map from disk, so one drawn a minute ago plays before
+it is listed anywhere; stop and rerun it from the Run window.
 
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests: `./gradlew test`.
-They also check that every file in `dungeon/src/main/resources/data` and the world's INI file load with no
-problems against the engine's own sources.
+They also check that every file in `dungeon/src/main/resources/data` loads with no problems against the
+engine's own sources, and that the Inspector reads a real unit.
 
 ## Plugin structure
 

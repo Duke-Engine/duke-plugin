@@ -2,11 +2,22 @@ package uz.duke.plugin.engine
 
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiRecordComponent
+import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import org.jetbrains.jps.model.java.JavaResourceRootType
+import uz.duke.plugin.assets.DukeAssets
 import uz.duke.plugin.duke.DukeBlock
+import uz.duke.plugin.duke.DukeFile
+import uz.duke.plugin.duke.DukeValue
+import uz.duke.plugin.inspector.FieldRow
+import uz.duke.plugin.inspector.InspectorModels
+import uz.duke.plugin.inspector.RecordRow
+import uz.duke.plugin.map.MapModels
+import uz.duke.plugin.preview.PreviewScene
+import uz.duke.plugin.preview.PreviewScenes
 import java.io.File
 
 /** Against the engine next to the plugin: its real records, registrations and game files are the spec. */
@@ -21,11 +32,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
 
     /** Every data file the game ships reads as the engine reads it: not one may raise a problem. */
     fun testGameDataIsCleanAgainstTheEngine() {
-        val resources = File("../dungeon/src/main/resources")
-        val files = File(resources, "data").walkTopDown().filter { it.extension == "duke" }.toList()
-        assertTrue("no data files found next to the plugin", files.size >= 40)
-        // Every one before any is checked: a unit links a set another file declares, as the game reads them together.
-        val added = files.map { myFixture.addFileToProject(it.relativeTo(resources).invariantSeparatorsPath, it.readText()) }
+        val added = addGameData()
         assertEmpty(added.flatMap { file ->
             myFixture.configureFromExistingVirtualFile(file.virtualFile)
             myFixture.doHighlighting(HighlightSeverity.WEAK_WARNING)
@@ -37,6 +44,52 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
             myFixture.doHighlighting(HighlightSeverity.ERROR).map { it.description },
             "'Monster' has no field 'Sped'", "'Monster' holds no block 'MoveUpdat'",
         )
+    }
+
+    /** The Inspector's form of a real unit: the groups its record marks, in order, and nothing it cannot read. */
+    fun testTheInspectorReadsARealUnit() {
+        val mage = addGameData().single { it.name == "skeleton_mage.duke" }
+        val model = InspectorModels.build(mage as DukeFile, 0, null)
+        assertEquals(listOf("Identity", "Body", "Modules", "Behaviour", "Spawning", "Look", "Animation", "Skills"), model.groups.map { it.title })
+        assertEmpty(model.problems.map { "${it.help.key}: ${it.problem}" })
+        val look = model.groups.single { it.title == "Look" }.rows.filterIsInstance<FieldRow>()
+        assertEquals("the held model sits a step in from the unit's own", listOf(0, 1), look.filter { it.help.key == "Model" }.map { it.depth })
+        assertEquals("Held", model.groups.single { it.title == "Look" }.rows.filterIsInstance<RecordRow>().single().word)
+    }
+
+    /** The map editor's reading of the map the game ships: its floor, its rooms, and what stands in them, on floor. */
+    fun testTheMapEditorReadsAShippedMap() {
+        val map = MapModels.build(addGameData().single { it.name == "first.duke" } as DukeFile)!!
+        assertEquals(50 to 36, map.width to map.height)
+        assertEquals(9, map.areas.size)
+        assertEquals(mapOf("Entrance" to 1, "Boss" to 1, "Monsters" to 25, "Props" to 8), map.layers.associate { it.key to it.things.size })
+        assertEmpty(map.layers.flatMap { it.things }.filter { map.isSolid(it.x, it.y) }.map { "${it.kind} ${it.x} ${it.y}" })
+    }
+
+    /** The preview of a real unit: dressed as the client dresses it, moving by its clips, with the sounds named for it. */
+    fun testThePreviewDrawsARealUnitAsTheGameDoes() {
+        val resources = myFixture.copyDirectoryToProject("dungeon/src/main/resources/animations", "res/animations").parent
+        PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
+        try {
+            val files = listOf("animations/humanoid.duke", "units/skeleton_mage.duke", "units/skeleton.duke", "sounds/sfx.duke").associateWith {
+                myFixture.addFileToProject("res/data/$it", File("../dungeon/src/main/resources/data/$it").readText()) as DukeFile
+            }
+            val mage = PreviewScenes.of(InspectorModels.build(files.getValue("units/skeleton_mage.duke"), 0, null))!!
+            assertEquals("models/monsters/skeleton_mage.glb", mage.model)
+            assertEquals(0xFF9A6A, mage.tint)
+            assertEquals(listOf(PreviewScene.Carried("models/monsters/staff.gltf", "handslot.r", 1f, 0f, 0f, 0f, 0f, 0f, 0f)), mage.held)
+            assertEquals(
+                "its own clips, and the set's for what it leaves out",
+                listOf("Idle" to "Ranged_Magic_Spellcasting_Long", "Walk" to "Walking_A", "Attack" to "Ranged_Magic_Shoot", "Death" to "Death_A"),
+                mage.actions.map { it.label to it.clip },
+            )
+            assertContainsElements(mage.libraries, "animations/characters/general.glb", "animations/characters/magic.glb")
+
+            val skeleton = PreviewScenes.of(InspectorModels.build(files.getValue("units/skeleton.duke"), 0, null))!!
+            assertEquals(listOf("Died"), skeleton.sounds.map { it.label })
+        } finally {
+            PsiTestUtil.removeSourceRoot(module, resources)
+        }
     }
 
     /**
@@ -69,11 +122,30 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         }
     }
 
+    /** A path of the kit's is found from the game's files as the classpath finds it: its own root first, then the others. */
+    fun testAPathIsFoundInAnyResourceRootOfTheProject() {
+        val game = myFixture.tempDirFixture.findOrCreateDir("game")
+        val kit = myFixture.tempDirFixture.findOrCreateDir("kit")
+        PsiTestUtil.addSourceRoot(module, game, JavaResourceRootType.RESOURCE)
+        PsiTestUtil.addSourceRoot(module, kit, JavaResourceRootType.RESOURCE)
+        try {
+            val star = myFixture.addFileToProject("kit/kit/effects/star.png", "")
+            val file = myFixture.addFileToProject("game/data/game.duke", "Game\n  Files = [kit/effects/star.png]\nEnd\n")
+            val value = PsiTreeUtil.findChildrenOfType(file, DukeValue::class.java).single()
+            assertEquals(star.virtualFile, DukeAssets.resolve(value, "kit/effects/star.png"))
+            assertNull(DukeAssets.resolve(value, "kit/effects/nothing.png"))
+            assertEquals(star, value.references.single().resolve())
+        } finally {
+            PsiTestUtil.removeSourceRoot(module, kit)
+            PsiTestUtil.removeSourceRoot(module, game)
+        }
+    }
+
     /** Ctrl+Click on a word opens the class the engine reads it as; on a key, the component it fills. */
     fun testWordsOpenTheClassesTheEngineReadsThemAs() {
         assertEquals("uz.duke.dungeon.content.Monster", classAt("Mon<caret>ster\nEnd\n"))
         assertEquals("uz.duke.rts.RtsTemplate", classAt("Obj<caret>ect\nEnd\n"))
-        assertEquals("uz.duke.dungeon.content.Effect", classAt("Eff<caret>ect\nEnd\n"))
+        assertEquals("uz.duke.client3d.Effect", classAt("Eff<caret>ect\nEnd\n"))
         assertEquals("uz.duke.core.module.MoveUpdate", classAt("Monster\n  Modules = [\n    Move<caret>Update\n    End\n  ]\nEnd\n"))
         assertEquals("uz.duke.game.script.ScriptModule", classAt("Monster\n  Modules = [\n    Script<caret>Module\n    End\n  ]\nEnd\n"))
         assertEquals("uz.duke.core.thing.Geometry.Cylinder", classAt("Monster\n  Geometry = Cyl<caret>inder\n    Radius = 1\n  End\nEnd\n"))
@@ -84,6 +156,15 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         assertEquals("portrait", (myFixture.elementAtCaret as PsiRecordComponent).name)
         myFixture.configureByText("u.duke", "Object\n  Modules = [\n    ActiveBody\n      Max<caret>Health = 1\n    End\n  ]\nEnd\n")
         assertEquals("maxHealth", (myFixture.elementAtCaret as PsiRecordComponent).name)
+    }
+
+    // Every one before any is checked: a unit links a set another file declares, and an effect of the kit's, as the
+    // game reads them together.
+    private fun addGameData(): List<PsiFile> {
+        val files = listOf(File("../dungeon/src/main/resources") to "data", File("../kit/src/main/resources") to "kit/data")
+            .flatMap { (resources, data) -> File(resources, data).walkTopDown().filter { it.extension == "duke" }.map { resources to it } }
+        assertTrue("no data files found next to the plugin", files.size >= 40)
+        return files.map { (resources, file) -> myFixture.addFileToProject(file.relativeTo(resources).invariantSeparatorsPath, file.readText()) }
     }
 
     private fun classAt(text: String): String? {

@@ -11,10 +11,14 @@ import com.intellij.psi.PsiClassObjectAccessExpression
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiEnumConstant
+import com.intellij.psi.PsiExpression
+import com.intellij.psi.PsiField
+import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiRecordComponent
+import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiWildcardType
 import com.intellij.psi.search.GlobalSearchScope
@@ -28,7 +32,6 @@ import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
 import com.intellij.util.containers.ConcurrentFactoryMap
-import uz.duke.plugin.engine.DukeSchemas
 
 /** What a block is, as `uz.duke.core.data.Binder` reads it. */
 sealed interface DukeShape {
@@ -131,7 +134,7 @@ object DukeRecords {
             .mapNotNull { it.element.parent as? PsiMethodCallExpression }
             .mapNotNull { call ->
                 val arguments = call.argumentList.expressions
-                val word = DukeSchemas.constantString(arguments.getOrNull(0)) ?: return@mapNotNull null
+                val word = constantString(arguments.getOrNull(0)) ?: return@mapNotNull null
                 val record = classLiteral(arguments.getOrNull(1)) ?: return@mapNotNull null
                 Triple(word.lowercase(), record, PsiTreeUtil.getParentOfType(call, PsiClass::class.java) == loader)
             }
@@ -174,7 +177,7 @@ object DukeRecords {
         return type.isRecord || isSealed(type) || type.isInterface
     }
 
-    private fun hasFactory(type: PsiClass) = listOf("of", "valueOf").any { name ->
+    fun hasFactory(type: PsiClass) = listOf("of", "valueOf").any { name ->
         type.findMethodsByName(name, false).any { it.hasModifierProperty(PsiModifier.STATIC) && it.parameterList.parametersCount == 1 }
     }
 
@@ -264,6 +267,18 @@ object DukeRecords {
 
     private val JAVA_UTIL = setOf("List", "Set", "Map")
 
+    /**
+     * A literal, or a constant followed to its literal by hand: the evaluator gives up on a field
+     * whose `String` type does not resolve, as in a project whose JDK is not set up.
+     */
+    fun constantString(expression: PsiElement?): String? = when (expression) {
+        null -> null
+        is PsiLiteralExpression -> expression.value as? String
+        is PsiReferenceExpression -> (expression.resolve() as? PsiField)?.initializer?.let(::constantString)
+        is PsiExpression -> JavaPsiFacade.getInstance(expression.project).constantEvaluationHelper.computeConstantExpression(expression) as? String
+        else -> null
+    }
+
     private fun classLiteral(expression: PsiElement?): PsiClass? =
         ((expression as? PsiClassObjectAccessExpression)?.operand?.type as? PsiClassType)?.resolve()
 
@@ -293,7 +308,7 @@ object DukeRecords {
     fun isBoolean(type: PsiType) = plainName(type) == "boolean"
 
     /** The primitive a type is or boxes, by name; a box read by its name where `java.lang` does not resolve. */
-    private fun plainName(type: PsiType): String =
+    fun plainName(type: PsiType): String =
         PsiPrimitiveType.getUnboxedType(type)?.canonicalText ?: BOXES[(type as? PsiClassType)?.className] ?: type.canonicalText
 
     private val BOXES = mapOf(

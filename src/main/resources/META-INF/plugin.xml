@@ -5,8 +5,8 @@
     <vendor url="https://www.sonic.uz">Sonic development team</vendor>
 
     <description><![CDATA[
-        Editor support for the files that hold a Duke Engine game's content: its <code>.duke</code> data files — units,
-        projectiles, effects, sounds — and the INI file of its world settings. Duke Engine is a deterministic Java game
+        Editor support for the files that hold a Duke Engine game's content: its <code>.duke</code> data files — its world,
+        its maps, units, projectiles, effects, sounds. Duke Engine is a deterministic Java game
         engine; what a block may hold is read from the game's own records, so the plugin knows no particular game.
         <h3><code>.duke</code> files</h3>
         <ul>
@@ -30,13 +30,14 @@
             <li>Renaming a module class, a record component or an enum constant renames it in the data files</li>
             <li>Folding for every block and every list over several lines, and a structure view of the blocks</li>
         </ul>
-        <h3>INI world settings</h3>
+        <h3>Duke Inspector</h3>
         <ul>
-            <li>Highlighting, folding and a structure view; sections inside a block, <code>Generation = Layout</code> to its own
-                <code>End</code></li>
-            <li>Checks for unclosed blocks, stray <code>End</code> lines and unrecognized lines</li>
-            <li>Duke Inspector tool window: the selected INI file as a form, with a checkbox, a list of files, block names or
-                animation clips, or a text field for each field, and its sections</li>
+            <li>The block under the caret as a form, drawn from its record: every field with its default, grouped as the
+                record groups them, each edited the way its type is — a number, Yes or No, a choice, a file, a link to another
+                block, an animation clip, a colour, a nested record, a list of modules as cards — and its Javadoc as help</li>
+            <li>Every change is a line in the file: a default set is a line written, a reset is the line taken out, and
+                Ctrl+Z takes back either</li>
+            <li>New from a template: a file with the record's own fields, listed in the game's file list</li>
         </ul>
         ]]></description>
 
@@ -70,21 +71,7 @@
         <completion.contributor language="Duke" implementationClass="uz.duke.plugin.duke.DukeCompletionContributor"/>
         <typedHandler implementation="uz.duke.plugin.duke.DukeTypedHandler"/>
 
-        <!-- INI world settings -->
-        <fileType name="Duke INI" language="DukeIni" extensions="ini"
-                  implementationClass="uz.duke.plugin.ini.DukeIniFileType" fieldName="INSTANCE"/>
-        <lang.parserDefinition language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniParserDefinition"/>
-        <lang.syntaxHighlighterFactory language="DukeIni"
-                                       implementationClass="uz.duke.plugin.ini.DukeIniSyntaxHighlighterFactory"/>
-        <lang.foldingBuilder language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFoldingBuilder"/>
-        <lang.psiStructureViewFactory language="DukeIni"
-                                      implementationClass="uz.duke.plugin.ini.DukeIniStructureViewFactory"/>
-        <lang.findUsagesProvider language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniFindUsagesProvider"/>
-        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeIniAnnotator"/>
-        <annotator language="DukeIni" implementationClass="uz.duke.plugin.ini.DukeAssetAnnotator"/>
-        <completion.contributor language="DukeIni"
-                                implementationClass="uz.duke.plugin.ini.DukeAssetCompletionContributor"/>
-        <typedHandler implementation="uz.duke.plugin.ini.DukeIniTypedHandler"/>
+        <fileEditorProvider implementation="uz.duke.plugin.map.DukeMapEditorProvider"/>
         <toolWindow id="Duke Inspector" anchor="right" icon="AllIcons.Toolwindows.ToolWindowStructure"
                     factoryClass="uz.duke.plugin.inspector.DukeInspectorFactory"/>
     </extensions>

@@ -21,8 +21,8 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.ProcessingContext
-import uz.duke.plugin.ini.AssetKind
-import uz.duke.plugin.ini.DukeAssets
+import uz.duke.plugin.assets.AssetKind
+import uz.duke.plugin.assets.DukeAssets
 
 /**
  * What a line may be, from the record its block is. On a line being begun: the keys the record has
@@ -37,7 +37,7 @@ class DukeCompletionContributor : CompletionContributor() {
             when (val holder = block.parent) {
                 is DukeField -> choices(holder, result, closing = false)
                 is DukeList -> (holder.parent as? DukeField)?.let { choices(it, result, closing = true) }
-                is DukeBlock -> DukeRecords.recordOf(holder)?.let { keysAndMaps(it, holder, result) }
+                is DukeBlock -> DukeRecords.recordOf(holder)?.let { keysAndMaps(it, holder, result) } ?: entryKeys(holder, result, withEquals = true)
                 else -> topLevelWords(parameters.originalFile).forEach {
                     result.addElement(LookupElementBuilder.create(it).withInsertHandler(::closeBlock))
                 }
@@ -45,7 +45,7 @@ class DukeCompletionContributor : CompletionContributor() {
         })
         extend(CompletionType.BASIC, psiElement().withParent(DukeKey::class.java), provider { parameters, result ->
             val block = (parameters.position.parent as DukeKey).field.block ?: return@provider
-            DukeRecords.recordOf(block)?.let { keys(it, block, result, withEquals = false) }
+            DukeRecords.recordOf(block)?.let { keys(it, block, result, withEquals = false) } ?: entryKeys(block, result, withEquals = false)
         })
         extend(CompletionType.BASIC, psiElement().withParent(DukeValue::class.java), provider { parameters, result ->
             val value = parameters.position.parent as DukeValue
@@ -70,6 +70,23 @@ class DukeCompletionContributor : CompletionContributor() {
         if (!DukeLinks.isClip(component)) return
         val block = value.field?.block ?: return
         for (clip in DukeLinks.clipsFor(block)) result.addElement(LookupElementBuilder.create(clip).withTypeText("clip"))
+    }
+
+    /** In a map whose keys link — `BossGuards` of a `Descent` — the blocks it may name and has not yet. */
+    private fun entryKeys(block: DukeBlock, result: CompletionResultSet, withEquals: Boolean) {
+        val entries = DukeRecords.shapeOf(block) as? DukeShape.Entries ?: return
+        val record = DukeLinks.linkOf(entries.component) ?: return
+        val written = block.fields.map { it.key }
+        for (name in DukeLinks.blocksOf(record, block).keys.sorted()) {
+            if (name in written) continue
+            var lookup = LookupElementBuilder.create(name).withTypeText(record.name)
+            if (withEquals) lookup = lookup.withInsertHandler { context, _ ->
+                val at = context.tailOffset
+                context.document.insertString(at, " = ")
+                context.editor.caretModel.moveToOffset(at + 3)
+            }
+            result.addElement(lookup)
+        }
     }
 
     /** The keys the record has not been given, and its maps not yet written. */

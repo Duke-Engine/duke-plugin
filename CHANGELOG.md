@@ -31,9 +31,25 @@
   engine says it, rather than as the block around it having no `End`.
 - A block's word that a game's record shares with an engine one (a game's `Fog` beside the client's) opens the
   game's own, else the one whose fields the block writes.
+- **Duke Inspector** for `.duke` files: the block under the caret as a form drawn from its record — groups from
+  `@Group`, an editor for each type, defaults from `DEFAULTS`, help from the Javadoc — that writes each change
+  into the file as one undoable edit. Lists of blocks are cards; a record inside another is a step in.
+- **New from Template**: a new `.duke` file from a record or a copy of a block, listed in the game's `Files`.
+- **Preview** above the Inspector's form: a block's model dressed as the game dresses it, its clips on buttons, and
+  its sounds — played in the IDE's own browser with three.js, from the game's files.
+- **Add Sound…**: a sound for a moment of the block's (`died.Skeleton`), copied from the last one for that moment.
+- **Map** tab for a block with a `@Grid`: its cells, rooms and things drawn from above; things put down, moved and
+  taken off by hand, each as a line of the file. Replaces the separate world builder.
+- **Play**: the game run from the IDE — on the map being edited, or from its start — in the Run window.
+- A path is found under any resource root of the project, as the classpath finds it: a game's file may name the
+  kit's (`kit/effects/particles/star_04.png`).
+- A `@Link` on a record written on one line, `Boss = Warden 8 5`, names its first word: checked, completed and
+  opened like any link.
 
 ### Removed
 
+- The Duke INI language — highlighting, checks, structure view and its Inspector: the world and maps are `.duke`
+  files now, and the Inspector reads those.
 - Module lines in INI files (`Update = MoveUpdate Tag`), with their completion, checks and navigation: the engine
   reads modules from `.duke` blocks named by their class.
 - The check of `ModuleFactory.register` names: a module is registered by its `Data` record, with no name to get wrong.

@@ -21,8 +21,8 @@ import com.intellij.psi.search.UsageSearchContext
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.tree.TokenSet
 import com.intellij.util.Processor
-import uz.duke.plugin.ini.AssetKind
-import uz.duke.plugin.ini.DukeAssets
+import uz.duke.plugin.assets.AssetKind
+import uz.duke.plugin.assets.DukeAssets
 import uz.duke.plugin.duke.DukeTypes as T
 
 /**
@@ -47,7 +47,8 @@ class DukeKeyReference(key: DukeKey) : PsiReferenceBase<DukeKey>(key, TextRange(
         val block = element.field.block ?: return null
         return when (val shape = DukeRecords.shapeOf(block)) {
             is DukeShape.Record -> DukeRecords.component(shape.record, element.text)
-            is DukeShape.Entries -> constant(DukeRecords.typeArgument(shape.component.type, 0), element.text)
+            is DukeShape.Entries -> DukeLinks.linkOf(shape.component)?.let { DukeLinks.blocksOf(it, element)[element.text] }
+                ?: constant(DukeRecords.typeArgument(shape.component.type, 0), element.text)
             null -> null
         }
     }
@@ -70,7 +71,7 @@ class DukeConstantReference(value: DukeValue, private val type: PsiType) :
 /** A path, whole from the resource root: Ctrl+Click opens the file. */
 class DukeFileReference(value: DukeValue) : PsiReferenceBase<DukeValue>(value, TextRange(0, value.textLength), true) {
     override fun resolve(): PsiElement? =
-        DukeAssets.rootOf(element)?.let { DukeAssets.find(it, element.unquoted) }?.let(element.manager::findFile)
+        DukeAssets.resolve(element, element.unquoted)?.let(element.manager::findFile)
 
     // ponytail: navigation only; moving an asset leaves the line as it was, and the check flags it.
     override fun isReferenceTo(element: PsiElement) = false
@@ -90,7 +91,9 @@ class DukeChoiceReference(value: DukeValue, private val type: PsiClass) :
 object DukeValueReferences {
     fun of(value: DukeValue): Array<PsiReference> {
         if (AssetKind.of(value.unquoted) != null) return arrayOf(DukeFileReference(value))
-        DukeLinks.componentOf(value)?.let(DukeLinks::linkOf)?.let { return arrayOf(DukeLinkReference(value, it)) }
+        DukeLinks.componentOf(value)?.let { component ->
+            DukeLinks.linkOf(component)?.let { return arrayOf(DukeLinkReference(value, it, DukeLinks.linkedName(component, value.unquoted))) }
+        }
         val type = typeOf(value) ?: return PsiReference.EMPTY_ARRAY
         if (DukeRecords.constantsOf(type) != null) return arrayOf(DukeConstantReference(value, type))
         val choice = DukeRecords.classOf(type)?.takeIf(DukeRecords::isChoosable) ?: return PsiReference.EMPTY_ARRAY
