@@ -5,25 +5,28 @@
     <vendor url="https://www.sonic.uz">Sonic development team</vendor>
 
     <description><![CDATA[
-        Editor support for the INI files that define content for Duke Engine, a deterministic Java RTS engine.
+        Editor support for the INI files that hold a Duke Engine game's content: its units, its world and its
+        settings. Duke Engine is a deterministic Java game engine; block types and fields are read from the game's
+        own code, so the plugin knows no particular game.
         <ul>
             <li>Highlighting for block headers, <code>End</code>, keys, values, numbers, strings and <code>;</code> comments</li>
-            <li>Folding for <code>Object ... End</code> blocks and their module sub-blocks</li>
-            <li>Structure view listing every block and the modules inside each <code>Object</code></li>
+            <li>Sections inside a block, as a <code>World</code> block holds them: <code>Generation = Layout</code>,
+                its fields and an <code>End</code> of its own</li>
+            <li>Folding for every block, module and section, and a structure view listing them</li>
             <li>Checks for unclosed blocks, stray <code>End</code> lines and unrecognized lines</li>
-            <li>Ctrl+Click from a block name used elsewhere, such as the hero a <code>DungeonSkill</code> belongs to, to its definition</li>
+            <li>Ctrl+Click from a block name used elsewhere, such as the hero a skill belongs to, to its definition</li>
             <li>Module names and module fields completed and checked against the engine's <code>Module</code> classes
                 on the project classpath; Ctrl+Click from a module name to its class</li>
             <li>A warning where <code>ModuleFactory.register</code> gives a module a name other than its class name,
                 with a quick fix</li>
-            <li>Asset paths (<code>Model = models/heroes/rogue.glb</code>, <code>Icon = skill_arrow_shot.png</code>)
-                completed from the resource root, checked there with exact letter case, and opened by Ctrl+Click</li>
+            <li>Asset paths, each written whole from the resource root (<code>Model = models/heroes/rogue.glb</code>),
+                completed there, checked with exact letter case, and opened by Ctrl+Click</li>
             <li>Duke Inspector tool window: the selected INI file as a form, with a checkbox, a list of files,
-                block names or animation clips, or a text field for each field, modules added by group, and
-                the blocks a unit is missing offered in one click</li>
+                block names or animation clips, or a text field for each field, modules added by group, sections,
+                and the blocks a unit is missing offered in one click</li>
             <li>File &gt; New &gt; Duke Unit: an empty unit or a renamed copy, added to the game's list of files</li>
         </ul>
-        Block types and the fields of blocks other than modules are not checked.
+        Every <code>.ini</code> file opens as Duke INI. The fields of blocks and sections are not checked; a module's are.
         ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

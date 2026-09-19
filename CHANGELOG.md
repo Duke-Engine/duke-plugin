@@ -2,7 +2,9 @@
 
 # Duke-plugin Changelog
 
-## [Unreleased]
+## Unreleased
+
+## 0.1.0-beta.1 - 2026-09-19
 
 ### Added
 
@@ -22,12 +24,3 @@
 - Sections inside a block, `Generation = Layout` to an `End` of their own, as a game's `World` block holds them:
   highlighted, folded, listed in the structure view, and in the Inspector each a group with its own fields and
   the fields its code reads.
-
-### Changed
-
-- The completion list opens on the space after `Key =` through a typed handler, replacing the deprecated
-  `CompletionContributor.invokeAutoPopup`.
-
-### Removed
-
-- The template's sample tool window.
