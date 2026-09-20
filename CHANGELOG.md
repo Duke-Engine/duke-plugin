@@ -53,6 +53,12 @@
 - A map checked where it is drawn: a thing off the edge or inside stone, rows of different widths, a ground that
   is not a corner of every cell — each on the line that says it, rather than in a list when the game is started.
   Two things on one cell is a warning, being a rule a game makes rather than something a map cannot mean.
+- **File → New → Project → Duke Game**: a new game that already runs — two units, a light and a camera in
+  `.duke` files, a couple of the kit's effects and a unit wearing one, a `Main` that opens the 3D client on
+  them, and a test of its own that loads the game headless.
+  Nothing is drawn from a model, because a new project has no art and the engine draws a template with no
+  `Model` as its `Geometry`: the first thing anybody sees is their own game. The engine is not published yet,
+  so the wizard asks where a checkout of it is and writes `includeBuild`.
 - **Save Preview** on the Map tab: `preview.png` written into the map's folder — the map from above, a square a
   cell — which is what a screen listing the maps shows of it.
 - **Resize Map…** on the Map tab: a map made bigger or smaller, from whichever corner is kept. What it grows into

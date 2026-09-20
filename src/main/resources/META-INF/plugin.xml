@@ -1,6 +1,6 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>uz.duke.plugin</id>
+    <id>uz.dukeengine.plugin</id>
     <name>Duke Engine</name>
     <vendor url="https://www.sonic.uz">Sonic development team</vendor>
 
@@ -49,36 +49,37 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- .duke data files, and .map for the places a game is played in -->
         <fileType name="Duke" language="Duke" extensions="duke;map"
-                  implementationClass="uz.duke.plugin.duke.DukeFileType" fieldName="INSTANCE"/>
-        <lang.parserDefinition language="Duke" implementationClass="uz.duke.plugin.duke.DukeParserDefinition"/>
+                  implementationClass="uz.dukeengine.plugin.duke.DukeFileType" fieldName="INSTANCE"/>
+        <lang.parserDefinition language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeParserDefinition"/>
         <lang.syntaxHighlighterFactory language="Duke"
-                                       implementationClass="uz.duke.plugin.duke.DukeSyntaxHighlighterFactory"/>
-        <lang.foldingBuilder language="Duke" implementationClass="uz.duke.plugin.duke.DukeFoldingBuilder"/>
-        <lang.psiStructureViewFactory language="Duke" implementationClass="uz.duke.plugin.duke.DukeStructureViewFactory"/>
-        <lang.commenter language="Duke" implementationClass="uz.duke.plugin.duke.DukeCommenter"/>
-        <lang.braceMatcher language="Duke" implementationClass="uz.duke.plugin.duke.DukeBraceMatcher"/>
-        <lang.findUsagesProvider language="Duke" implementationClass="uz.duke.plugin.duke.DukeFindUsagesProvider"/>
-        <referencesSearch implementation="uz.duke.plugin.duke.DukeKeySearcher"/>
-        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeWord"
-                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
-        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeKey"
-                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
-        <lang.elementManipulator forClass="uz.duke.plugin.duke.DukeValue"
-                                 implementationClass="uz.duke.plugin.duke.DukeLeafManipulator"/>
-        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAnnotator"/>
-        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeEngineAnnotator"/>
-        <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAssetAnnotator"/>
-        <annotator language="Duke" implementationClass="uz.duke.plugin.map.DukeMapAnnotator"/>
-        <completion.contributor language="Duke" implementationClass="uz.duke.plugin.duke.DukeCompletionContributor"/>
-        <typedHandler implementation="uz.duke.plugin.duke.DukeTypedHandler"/>
+                                       implementationClass="uz.dukeengine.plugin.duke.DukeSyntaxHighlighterFactory"/>
+        <lang.foldingBuilder language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeFoldingBuilder"/>
+        <lang.psiStructureViewFactory language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeStructureViewFactory"/>
+        <lang.commenter language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeCommenter"/>
+        <lang.braceMatcher language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeBraceMatcher"/>
+        <lang.findUsagesProvider language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeFindUsagesProvider"/>
+        <referencesSearch implementation="uz.dukeengine.plugin.duke.DukeKeySearcher"/>
+        <lang.elementManipulator forClass="uz.dukeengine.plugin.duke.DukeWord"
+                                 implementationClass="uz.dukeengine.plugin.duke.DukeLeafManipulator"/>
+        <lang.elementManipulator forClass="uz.dukeengine.plugin.duke.DukeKey"
+                                 implementationClass="uz.dukeengine.plugin.duke.DukeLeafManipulator"/>
+        <lang.elementManipulator forClass="uz.dukeengine.plugin.duke.DukeValue"
+                                 implementationClass="uz.dukeengine.plugin.duke.DukeLeafManipulator"/>
+        <annotator language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeEngineAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeAssetAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.dukeengine.plugin.map.DukeMapAnnotator"/>
+        <moduleBuilder builderClass="uz.dukeengine.plugin.project.DukeGameModuleBuilder"/>
+        <completion.contributor language="Duke" implementationClass="uz.dukeengine.plugin.duke.DukeCompletionContributor"/>
+        <typedHandler implementation="uz.dukeengine.plugin.duke.DukeTypedHandler"/>
 
-        <fileEditorProvider implementation="uz.duke.plugin.map.DukeMapEditorProvider"/>
+        <fileEditorProvider implementation="uz.dukeengine.plugin.map.DukeMapEditorProvider"/>
         <toolWindow id="Duke Inspector" anchor="right" icon="AllIcons.Toolwindows.ToolWindowStructure"
-                    factoryClass="uz.duke.plugin.inspector.DukeInspectorFactory"/>
+                    factoryClass="uz.dukeengine.plugin.inspector.DukeInspectorFactory"/>
     </extensions>
 
     <projectListeners>
-        <listener class="uz.duke.plugin.inspector.DukeInspectorOpener"
+        <listener class="uz.dukeengine.plugin.inspector.DukeInspectorOpener"
                   topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 </idea-plugin>

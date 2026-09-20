@@ -11,6 +11,18 @@ records, so the plugin knows no particular game.
 
 ## Features
 
+### A new game
+
+**File → New → Project → Duke Game** writes a game that runs before anything is changed: two units, a light
+and a camera as `.duke` blocks, two of the kit's effects with a unit wearing one, a `Main` that opens the 3D
+client, a `Content` that reads the files, and a test that loads the whole thing headless. Nothing in it is drawn from a model file — a template with no `Model` is
+drawn as its `Geometry` — so a new project needs no art to show something, and a model is one line when there
+is one.
+
+The engine is not published to a repository yet, so the wizard asks where a checkout of it is and writes
+`includeBuild(…)` into the generated `settings.gradle.kts`. Everything else in that file is an ordinary
+dependency and stays as it is once the engine is published.
+
 ### `.duke` files
 
 A `.duke` file is blocks: a line that is one word opens one, and `End` closes the innermost. The engine's

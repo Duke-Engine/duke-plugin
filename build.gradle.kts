@@ -49,5 +49,5 @@ sourceSets.main { resources.srcDir(viewerLibraries) }
 tasks.test {
     // The IDE bundles plugins (Vue among them) that cannot start from the test classpath and fail
     // any test that completes or renames; load only this plugin and what it depends on.
-    systemProperty("idea.load.plugins.id", "uz.duke.plugin")
+    systemProperty("idea.load.plugins.id", "uz.dukeengine.plugin")
 }
