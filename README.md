@@ -190,6 +190,24 @@ or from its start for any other block. The game reads the map from disk, so one 
 it is listed anywhere; stop and rerun it from the Run window.
 
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests: `./gradlew test`.
+
+### Releasing it
+
+```
+./gradlew buildPlugin    # the zip, in build/distributions
+./gradlew verifyPlugin   # what JetBrains checks before it takes one (downloads IDEs)
+./gradlew patchChangelog # moves CHANGELOG.md's Unreleased section under the version
+./gradlew publishPlugin  # needs the four environment variables below
+```
+
+Nothing secret is in this repository. To publish, set `PUBLISH_TOKEN` (from your profile on
+plugins.jetbrains.com), and `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` for
+[plugin signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html).
+
+A `0.x` version goes to the **beta** channel, so it is installed only by somebody who added that channel on
+purpose; the first version without a leading `0.` goes to the default one. `since-build` is the platform this
+is built against and there is no upper bound — `verifyPlugin` is what says whether a newer IDE works, rather
+than a number written before anybody has tried.
 They also check that every file in `dungeon/src/main/resources/data` loads with no problems against the
 engine's own sources, and that the Inspector reads a real unit.
 

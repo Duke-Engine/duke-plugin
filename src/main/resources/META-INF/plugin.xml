@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>uz.dukeengine.plugin</id>
     <name>Duke Engine</name>
-    <vendor url="https://www.sonic.uz">Sonic development team</vendor>
+    <vendor url="https://duke-engine.uz">Sonic development team</vendor>
 
     <description><![CDATA[
         Editor support for the files that hold a Duke Engine game's content: its <code>.duke</code> data files — its world,
@@ -29,6 +29,12 @@
                 and opened by Ctrl+Click</li>
             <li>Renaming a module class, a record component or an enum constant renames it in the data files</li>
             <li>Folding for every block and every list over several lines, and a structure view of the blocks</li>
+        </ul>
+        <h3>A new game</h3>
+        <ul>
+            <li><b>File → New → Project → Duke Game</b> writes a game that already runs: two units, a light and a
+                camera as <code>.duke</code> blocks, a couple of the kit's effects with a unit wearing one, a
+                <code>Main</code> that opens the 3D client, and a test that loads the whole thing headless</li>
         </ul>
         <h3>Duke Inspector</h3>
         <ul>

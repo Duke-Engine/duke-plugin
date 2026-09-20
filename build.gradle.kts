@@ -51,3 +51,69 @@ tasks.test {
     // any test that completes or renames; load only this plugin and what it depends on.
     systemProperty("idea.load.plugins.id", "uz.dukeengine.plugin")
 }
+
+// ---------------------------------------------------------------------------
+// The release.
+//
+//   ./gradlew buildPlugin         # the zip, in build/distributions
+//   ./gradlew verifyPlugin        # what JetBrains checks before it takes one
+//   ./gradlew publishPlugin       # needs the token and the signing key below
+//
+// Nothing secret is in this repository. The release workflow passes them as
+// environment variables, and they can be set by hand to publish from a laptop:
+//
+//   PUBLISH_TOKEN          from plugins.jetbrains.com, under Your Profile
+//   CERTIFICATE_CHAIN      the plugin signing chain, as PEM
+//   PRIVATE_KEY            its private key, as PEM
+//   PRIVATE_KEY_PASSWORD   the key's passphrase
+//
+// See https://plugins.jetbrains.com/docs/intellij/plugin-signing.html
+// ---------------------------------------------------------------------------
+intellijPlatform {
+    pluginConfiguration {
+        version = project.version.toString()
+
+        ideaVersion {
+            // 2025.3, the platform this is built and tested against.
+            sinceBuild = "253"
+            // No upper bound: a version written here is a version the plugin refuses to install on before
+            // anybody has found out whether it would have worked. `verifyPlugin` is what says whether it does,
+            // and it is run on every release.
+            untilBuild = provider { null }
+        }
+
+        // What changed, taken from CHANGELOG.md rather than written twice. `./gradlew patchChangelog` moves
+        // the Unreleased section under the version being released.
+        changeNotes = provider {
+            with(changelog) {
+                renderItem(
+                    (getOrNull(project.version.toString()) ?: getUnreleased())
+                        .withHeader(false)
+                        .withEmptySections(false),
+                    org.jetbrains.changelog.Changelog.OutputType.HTML,
+                )
+            }
+        }
+    }
+
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+        // A 0.x goes to the beta channel: somebody who wants it adds the channel's URL on purpose, and
+        // nobody gets it by default until the version has no `0.` in front of it.
+        channels = providers.gradleProperty("version").map {
+            listOf(if (it.startsWith("0.")) "beta" else "default")
+        }
+    }
+
+    pluginVerification {
+        ides {
+            recommended()
+        }
+    }
+}

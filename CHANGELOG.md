@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-20
+
 ### Added
 
 - Duke language for `.duke` data files: highlighting, brace matching, line comments, folding of blocks and of lists
