@@ -64,10 +64,14 @@ object GameTemplate {
         }
 
         dependencies {
+            // Every module of the engine at one version. Raise it here and the whole engine moves
+            // together; nothing below needs a version of its own.
+            implementation(platform("$GROUP:bom:$ENGINE"))
+
             // The 3D client, which brings core, rts and game with it.
-            implementation("$GROUP:client3d:$ENGINE")
+            implementation("$GROUP:client3d")
             // The starter set: effects every game may use, and the art they are drawn with.
-            implementation("$GROUP:kit:$ENGINE")
+            implementation("$GROUP:kit")
 
             testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
             testRuntimeOnly("org.junit.platform:junit-platform-launcher")

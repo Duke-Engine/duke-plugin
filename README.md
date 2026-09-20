@@ -191,6 +191,22 @@ it is listed anywhere; stop and rerun it from the Run window.
 
 Run it with `./gradlew runIde`, then open the duke-engine project in the IDE that starts. Tests: `./gradlew test`.
 
+### What the tests read
+
+The plugin knows no particular game, but testing it needs one: its checks are only worth anything run over
+real records and real data rather than over fixtures written to agree with them. So the tests read **two
+checkouts off the disk**: the engine, for its records, and a game, for its files.
+
+Both are **looked for** rather than hard-coded, because the plugin lives inside the engine's repository today
+and beside it once they are split:
+
+| | Looked for in | Point it elsewhere with |
+|---|---|---|
+| the engine | `..`, `../duke-engine`, `../DukeEngine` | `DUKE_ENGINE` |
+| a game to read | `../dungeon`, `<engine>/dungeon`, `../duke-dungeon` | `DUKE_SAMPLE` |
+
+If neither is found the tests say so and name the places they looked. See `test/…/engine/Repos.kt`.
+
 ### Releasing it
 
 ```

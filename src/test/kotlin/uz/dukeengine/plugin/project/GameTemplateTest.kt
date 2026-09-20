@@ -53,6 +53,9 @@ class GameTemplateTest {
             "the build must point at the Main that was written",
             made.getValue("build.gradle.kts").contains("mainClass.set(\"com.example.siege.Main\")"),
         )
+        val build = made.getValue("build.gradle.kts")
+        assertTrue("the version is written once, in the platform", build.contains("platform(\"uz.duke-engine:bom:"))
+        assertFalse("and nowhere else", build.contains("uz.duke-engine:client3d:"))
     }
 
     @Test

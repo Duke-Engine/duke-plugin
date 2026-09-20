@@ -26,10 +26,15 @@ import java.io.File
 class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     override fun setUp() {
         super.setUp()
-        myFixture.testDataPath = File("..").canonicalPath
+        myFixture.testDataPath = Repos.engine.canonicalPath
         for (module in ENGINE_MODULES) {
             myFixture.copyDirectoryToProject("$module/src/main/java", "")
         }
+        // The sample game's own records, from wherever it is: once the repositories are split it is no longer
+        // a folder of the engine's, and its records are what its data files are read as.
+        myFixture.testDataPath = Repos.sample.parentFile.canonicalPath
+        myFixture.copyDirectoryToProject("${Repos.sample.name}/src/main/java", "")
+        myFixture.testDataPath = Repos.engine.canonicalPath
     }
 
     /** Every data file the game ships reads as the engine reads it: not one may raise a problem. */
@@ -76,7 +81,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         val resources = myFixture.tempDirFixture.findOrCreateDir("res")
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
-            val shipped = File("../dungeon/src/main/resources")
+            val shipped = File(Repos.sample, "src/main/resources")
             val files = shipped.walkTopDown().filter { it.extension == "duke" || it.extension == "map" }.map { file ->
                 myFixture.addFileToProject("res/${file.relativeTo(shipped).invariantSeparatorsPath}", file.readText())
             }.toList()
@@ -113,7 +118,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         val resources = myFixture.tempDirFixture.findOrCreateDir("res")
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
-            val shipped = File("../dungeon/src/main/resources")
+            val shipped = File(Repos.sample, "src/main/resources")
             val files = shipped.walkTopDown().filter { it.extension == "duke" || it.extension == "map" }.map { file ->
                 myFixture.addFileToProject("res/${file.relativeTo(shipped).invariantSeparatorsPath}", file.readText())
             }.toList()
@@ -140,7 +145,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
             val files = listOf("animations/humanoid.duke", "units/skeleton_mage.duke", "units/skeleton.duke", "sounds/sfx.duke").associateWith {
-                myFixture.addFileToProject("res/data/$it", File("../dungeon/src/main/resources/data/$it").readText()) as DukeFile
+                myFixture.addFileToProject("res/data/$it", File(Repos.sample, "src/main/resources/data/$it").readText()) as DukeFile
             }
             val mage = PreviewScenes.of(InspectorModels.build(files.getValue("units/skeleton_mage.duke"), 0, null))!!
             assertEquals("models/monsters/skeleton_mage.glb", mage.model)
@@ -169,7 +174,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
             myFixture.addFileToProject("res/data/animations/humanoid.duke",
-                File("../dungeon/src/main/resources/data/animations/humanoid.duke").readText())
+                File(Repos.sample, "src/main/resources/data/animations/humanoid.duke").readText())
             val unit = myFixture.addFileToProject("res/data/units/brute.duke",
                 "Monster\n  Name = Brute\n  Animations = Humanoid\n  Walk = Run\nEnd\n")
             myFixture.configureFromExistingVirtualFile(unit.virtualFile)
@@ -232,8 +237,8 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     private fun addGameData(): List<PsiFile> {
         // The rules under data/, the kit's, and the maps -- folders of their own under maps/, not listed among
         // the files and read as .map rather than .duke. See uz.dukeengine.core.map.MapPackage.
-        val files = listOf(File("../dungeon/src/main/resources") to "data", File("../dungeon/src/main/resources") to "maps",
-            File("../kit/src/main/resources") to "kit/data")
+        val files = listOf(File(Repos.sample, "src/main/resources") to "data", File(Repos.sample, "src/main/resources") to "maps",
+            File(Repos.kit, "src/main/resources") to "kit/data")
             .flatMap { (resources, data) -> File(resources, data).walkTopDown()
                 .filter { it.extension == "duke" || it.extension == "map" }.map { resources to it } }
         assertTrue("no data files found next to the plugin", files.size >= 40)
@@ -248,6 +253,6 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     private companion object {
         // The client too: a block can be read straight into its records (OrderMark), and a game's
         // record can share a name with one of them (Fog).
-        val ENGINE_MODULES = listOf("core", "rts", "game", "client3d", "dungeon")
+        val ENGINE_MODULES = listOf("core", "rts", "game", "client3d")
     }
 }
