@@ -47,8 +47,8 @@
     <resource-bundle>messages.DukeBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- .duke data files -->
-        <fileType name="Duke" language="Duke" extensions="duke"
+        <!-- .duke data files, and .map for the places a game is played in -->
+        <fileType name="Duke" language="Duke" extensions="duke;map"
                   implementationClass="uz.duke.plugin.duke.DukeFileType" fieldName="INSTANCE"/>
         <lang.parserDefinition language="Duke" implementationClass="uz.duke.plugin.duke.DukeParserDefinition"/>
         <lang.syntaxHighlighterFactory language="Duke"
@@ -68,6 +68,7 @@
         <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAnnotator"/>
         <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeEngineAnnotator"/>
         <annotator language="Duke" implementationClass="uz.duke.plugin.duke.DukeAssetAnnotator"/>
+        <annotator language="Duke" implementationClass="uz.duke.plugin.map.DukeMapAnnotator"/>
         <completion.contributor language="Duke" implementationClass="uz.duke.plugin.duke.DukeCompletionContributor"/>
         <typedHandler implementation="uz.duke.plugin.duke.DukeTypedHandler"/>
 

@@ -238,10 +238,14 @@ class DukeEngineAnnotator : Annotator {
             return
         }
         if (DukeRecords.isCollection(type)) {
-            val blocks = DukeRecords.isChoosable(DukeRecords.blockClass(type))
+            val element = DukeRecords.blockClass(type)
+            val blocks = DukeRecords.isChoosable(element)
+            // A record read from one line — `Skeleton 17 16` — may also be written as a block, for a list whose
+            // things have more to say than a line holds. See Binder.
+            val eitherWay = blocks || element?.isRecord == true
             when {
                 list == null -> holder.error(at, if (blocks) "duke.is.block.list" else "duke.is.list", key)
-                list.holdsBlocks && !blocks -> holder.error(list.firstChild, "duke.is.list", key)
+                list.holdsBlocks && !eitherWay -> holder.error(list.firstChild, "duke.is.list", key)
                 !list.holdsBlocks && blocks -> holder.error(list, "duke.is.block.list", key)
                 !list.holdsBlocks -> {
                     val element = DukeRecords.elementOf(type) ?: return

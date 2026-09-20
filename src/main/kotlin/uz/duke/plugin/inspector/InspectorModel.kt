@@ -396,7 +396,7 @@ object InspectorModels {
     fun isText(type: PsiType) = type.canonicalText == "java.lang.String" || type.presentableText == "String"
 
     /** A packed `0xRRGGBB` by its name: a colour or a tint. */
-    private fun isColour(key: String) = key.contains("colour", ignoreCase = true) || key.contains("color", ignoreCase = true)
+    private fun isColour(key: String) = listOf("colour", "color", "tint").any { key.contains(it, ignoreCase = true) }
         || key.equals("tint", ignoreCase = true)
 
     fun plainDefault(type: PsiType): String = when {

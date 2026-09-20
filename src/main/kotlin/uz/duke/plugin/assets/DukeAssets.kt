@@ -27,7 +27,7 @@ enum class AssetKind(private val label: String, val extensions: List<String>) {
         /** What a key's own name promises: `Model`, `CmdMoveIcon`, `TitleFont`. */
         fun named(key: String): AssetKind? = when {
             key.endsWith("model", ignoreCase = true) -> MODEL
-            listOf("texture", "image", "icon").any { key.endsWith(it, ignoreCase = true) } -> IMAGE
+            listOf("texture", "image", "icon", "border", "frame").any { key.endsWith(it, ignoreCase = true) } -> IMAGE
             key.endsWith("sound", ignoreCase = true) -> AUDIO
             key.endsWith("font", ignoreCase = true) -> FONT
             else -> null

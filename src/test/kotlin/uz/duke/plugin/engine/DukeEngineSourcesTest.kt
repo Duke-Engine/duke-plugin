@@ -16,6 +16,8 @@ import uz.duke.plugin.inspector.FieldRow
 import uz.duke.plugin.inspector.InspectorModels
 import uz.duke.plugin.inspector.RecordRow
 import uz.duke.plugin.map.MapModels
+import uz.duke.plugin.map.MapScenes
+import uz.duke.plugin.preview.HudScenes
 import uz.duke.plugin.preview.PreviewScene
 import uz.duke.plugin.preview.PreviewScenes
 import java.io.File
@@ -59,11 +61,68 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
 
     /** The map editor's reading of the map the game ships: its floor, its rooms, and what stands in them, on floor. */
     fun testTheMapEditorReadsAShippedMap() {
-        val map = MapModels.build(addGameData().single { it.name == "first.duke" } as DukeFile)!!
+        val map = MapModels.build(addGameData().single { it.name == "first.map" } as DukeFile)!!
         assertEquals(50 to 36, map.width to map.height)
         assertEquals(9, map.areas.size)
         assertEquals(mapOf("Entrance" to 1, "Boss" to 1, "Monsters" to 25, "Props" to 8), map.layers.associate { it.key to it.things.size })
         assertEmpty(map.layers.flatMap { it.things }.filter { map.isSolid(it.x, it.y) }.map { "${it.kind} ${it.x} ${it.y}" })
+    }
+
+    /**
+     * The 3D view's reading of the map the game ships: the storey height its world gives, the theme and tone the game
+     * lays it in for its depth and seed, its relief, and each thing in the model its block or its theme gives it.
+     */
+    fun testThe3DViewDrawsAShippedMapAsTheGameDoes() {
+        val resources = myFixture.tempDirFixture.findOrCreateDir("res")
+        PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
+        try {
+            val shipped = File("../dungeon/src/main/resources")
+            val files = shipped.walkTopDown().filter { it.extension == "duke" || it.extension == "map" }.map { file ->
+                myFixture.addFileToProject("res/${file.relativeTo(shipped).invariantSeparatorsPath}", file.readText())
+            }.toList()
+            val scene = MapScenes.of(MapModels.build(files.single { it.name == "first.map" } as DukeFile)!!)!!
+            assertEquals(resources.path, scene.root)
+            for (expected in listOf(
+                "\"levelHeight\":10.0",
+                "\"floor\":\"models/tiles/forest/floor_rocky.gltf\",\"wall\":\"models/tiles/forest/tree_round.gltf\"",
+                "\"sun\":{\"pitch\":40.0,\"yaw\":219.0,\"strength\":100.0,\"ambient\":55.0,\"colour\":16775142,\"ambientTint\":15132415}",
+                "\"relief\":[[0,1,2,3,5,5,5,5,6,4,3,1,0,",
+                "{\"layer\":\"Boss\",\"kind\":\"Warden\",\"x\":8,\"y\":5,",
+                "\"held\":[{\"model\":\"models/monsters/axe.gltf\",\"bone\":\"handslot.r\"",
+            )) assertTrue("no $expected in ${scene.json.take(300)}…", expected in scene.json)
+        } finally {
+            PsiTestUtil.removeSourceRoot(module, resources)
+        }
+    }
+
+    /**
+     * The preview over a skin of the hero's bar: the bar as the game's look lays it out, every skin the game paints
+     * it with, its HUD's words — and the skin being edited, to point at where it goes. None over a block that is not
+     * part of the bar.
+     */
+    fun testASkinIsPreviewedOnTheBarItPaints() {
+        val resources = myFixture.tempDirFixture.findOrCreateDir("res")
+        PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
+        try {
+            val shipped = File("../dungeon/src/main/resources")
+            val files = shipped.walkTopDown().filter { it.extension == "duke" || it.extension == "map" }.map { file ->
+                myFixture.addFileToProject("res/${file.relativeTo(shipped).invariantSeparatorsPath}", file.readText())
+            }.toList()
+            val hud = files.single { it.name == "hud.duke" } as DukeFile
+            val scene = HudScenes.of(InspectorModels.build(hud, 0, hud.text.indexOf("Name = Minimap")))!!
+            assertEquals(resources.path, scene.root)
+            for (expected in listOf(
+                "\"focus\":\"Minimap\"",
+                "\"blocks\":[\"Minimap\",\"Hero\",\"Bag\",\"Skills\",\"Depth\"]",
+                "\"slabRimColour\":\"0x6B5C46\"",
+                "{\"name\":\"Minimap\",\"texture\":\"ui/borders/default/border/panel-border-016.png\",\"inset\":\"16\",\"scale\":\"1.15\",\"tint\":\"0xC9A24B\"}",
+            )) assertTrue("no $expected in ${scene.json.take(300)}…", expected in scene.json)
+
+            val mage = files.single { it.name == "skeleton_mage.duke" } as DukeFile
+            assertNull("a unit is no part of the bar", HudScenes.of(InspectorModels.build(mage, 0, null)))
+        } finally {
+            PsiTestUtil.removeSourceRoot(module, resources)
+        }
     }
 
     /** The preview of a real unit: dressed as the client dresses it, moving by its clips, with the sounds named for it. */
@@ -161,8 +220,12 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
     // Every one before any is checked: a unit links a set another file declares, and an effect of the kit's, as the
     // game reads them together.
     private fun addGameData(): List<PsiFile> {
-        val files = listOf(File("../dungeon/src/main/resources") to "data", File("../kit/src/main/resources") to "kit/data")
-            .flatMap { (resources, data) -> File(resources, data).walkTopDown().filter { it.extension == "duke" }.map { resources to it } }
+        // The rules under data/, the kit's, and the maps -- folders of their own under maps/, not listed among
+        // the files and read as .map rather than .duke. See uz.duke.core.map.MapPackage.
+        val files = listOf(File("../dungeon/src/main/resources") to "data", File("../dungeon/src/main/resources") to "maps",
+            File("../kit/src/main/resources") to "kit/data")
+            .flatMap { (resources, data) -> File(resources, data).walkTopDown()
+                .filter { it.extension == "duke" || it.extension == "map" }.map { resources to it } }
         assertTrue("no data files found next to the plugin", files.size >= 40)
         return files.map { (resources, file) -> myFixture.addFileToProject(file.relativeTo(resources).invariantSeparatorsPath, file.readText()) }
     }

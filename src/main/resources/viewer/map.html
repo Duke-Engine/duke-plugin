@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duke map</title>
+<style>
+  :root { --background: #2b2d30; --foreground: #dfe1e5; --muted: #868a91; --border: #43454a; --accent: #3574f0; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07060a; color: var(--foreground);
+    font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; }
+  #view { position: absolute; inset: 0; }
+  #view canvas { display: block; width: 100%; height: 100%; }
+  #status { position: absolute; left: 8px; bottom: 6px; right: 8px; color: var(--foreground); text-shadow: 0 1px 2px #000;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  #hint { position: absolute; right: 8px; top: 6px; color: var(--muted); text-shadow: 0 1px 2px #000; pointer-events: none; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./three/build/three.module.js", "three/addons/": "./three/examples/jsm/" } }
+</script>
+<script>
+  // What the IDE asks before the page's module has loaded waits for it.
+  window.duke = { waiting: [], showMap(scene, colours) { this.waiting.push(['showMap', scene, colours]); }, tool(tool) { this.waiting.push(['tool', tool]); },
+    say(text) { this.waiting.push(['say', text]); } };
+</script>
+<script type="module" src="./map.js"></script>
+</head>
+<body>
+<div id="view"></div>
+<div id="hint">right drag: turn · middle drag: slide · wheel: nearer</div>
+<div id="status"></div>
+</body>
+</html>

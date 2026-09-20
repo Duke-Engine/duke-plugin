@@ -13,7 +13,7 @@ import java.nio.file.Path
 
 /**
  * The game started from the IDE, on a map when one is asked for: the Gradle project a data file belongs to, run as
- * `gradlew :dungeon:run --args=--map=src/main/resources/data/maps/first.duke`, in a tab of the Run window that
+ * `gradlew :dungeon:run --args=--map=src/main/resources/maps/first/first.map`, in a tab of the Run window that
  * stops it and starts it again. The map is told by its file, which the game reads from disk as it is saved — a map
  * drawn a minute ago plays before it is listed anywhere. That a game is told its map with `--map=` is all that is
  * known of it here.

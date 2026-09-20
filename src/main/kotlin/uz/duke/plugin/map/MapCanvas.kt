@@ -1,7 +1,5 @@
 package uz.duke.plugin.map
 
-import com.intellij.openapi.editor.Document
-import com.intellij.openapi.project.Project
 import com.intellij.util.ui.JBUI
 import java.awt.BasicStroke
 import java.awt.Color
@@ -17,14 +15,14 @@ import javax.swing.JComponent
 import javax.swing.JScrollPane
 import javax.swing.SwingUtilities
 
-/** What the canvas asks of the editor around it. */
+/** What a view of the map asks of the editor around it: each change to the file, made by the editor's rules. */
 internal interface MapHost {
-    val project: Project
+    /** What the tool puts down, on an empty cell — or, where nothing can go there, why. */
+    fun put(map: MapModel, x: Int, y: Int)
 
-    /** What a click puts down: a layer, and the kind of it when its things name one. */
-    val tool: Pair<Layer, String?>?
+    fun move(map: MapModel, layer: Layer, thing: Thing, x: Int, y: Int)
 
-    fun edit(name: String, change: (Document) -> Unit)
+    fun takeOff(map: MapModel, layer: Layer, thing: Thing)
 
     /** A thing clicked rather than dragged: what the next click puts down becomes one of it. */
     fun picked(layer: Layer, thing: Thing)
@@ -94,8 +92,7 @@ internal class MapCanvas(private val host: MapHost) : JComponent() {
         val there = model.thingsAt(cell.x, cell.y).firstOrNull()
         if (SwingUtilities.isRightMouseButton(e) || e.isPopupTrigger) {
             val (layer, thing) = there ?: return
-            host.edit("Take Off ${thing.kind ?: layer.label}") { MapEdits.remove(it, model, layer, thing) }
-            return
+            return host.takeOff(model, layer, thing)
         }
         if (!SwingUtilities.isLeftMouseButton(e)) return
         if (there != null) {
@@ -103,10 +100,7 @@ internal class MapCanvas(private val host: MapHost) : JComponent() {
             pressedAt = cell
             return
         }
-        val (layer, kind) = host.tool ?: return
-        if (model.isSolid(cell.x, cell.y)) return host.say("Rock: nothing is put down on it.")
-        if (layer.kinded && kind.isNullOrBlank()) return host.say("Choose which ${layer.label.lowercase()} to put down.")
-        host.edit("Put Down ${kind ?: layer.label}") { MapEdits.place(host.project, it, model, layer, kind, cell.x, cell.y) }
+        host.put(model, cell.x, cell.y)
     }
 
     private fun released(e: MouseEvent) {
@@ -114,12 +108,10 @@ internal class MapCanvas(private val host: MapHost) : JComponent() {
         dragging = null
         val model = model ?: return
         val cell = cellAt(e.point)
-        when {
-            cell == null -> Unit
-            cell == pressedAt -> host.picked(layer, thing)
-            model.isSolid(cell.x, cell.y) -> host.say("Rock: nothing is put down on it.")
-            model.thingsAt(cell.x, cell.y).isNotEmpty() -> host.say("Something stands there already.")
-            else -> host.edit("Move ${thing.kind ?: layer.label}") { MapEdits.move(it, model, layer, thing, cell.x, cell.y) }
+        when (cell) {
+            null -> Unit
+            pressedAt -> host.picked(layer, thing)
+            else -> host.move(model, layer, thing, cell.x, cell.y)
         }
         repaint()
     }
@@ -239,7 +231,7 @@ internal class MapCanvas(private val host: MapHost) : JComponent() {
         }
     }
 
-    private companion object {
+    companion object {
         val BACKGROUND = Color(18, 18, 21)
         val ROCK = Color(28, 28, 32)
         val LINES = Color(44, 44, 50)

@@ -55,6 +55,9 @@ import uz.duke.plugin.duke.DukeFile
 import uz.duke.plugin.duke.DukeFileType
 import uz.duke.plugin.map.MapModels
 import uz.duke.plugin.play.DukePlay
+import uz.duke.plugin.preview.HudPreview
+import uz.duke.plugin.preview.HudScene
+import uz.duke.plugin.preview.HudScenes
 import uz.duke.plugin.preview.ModelPreview
 import uz.duke.plugin.preview.PreviewScene
 import uz.duke.plugin.preview.PreviewScenes
@@ -125,7 +128,11 @@ class DukeInspectorPanel(override val project: Project, private val window: Tool
     private var highlighter: RangeHighlighter? = null
     private val splitter = OnePixelSplitter(true, "duke.inspector.preview", 0.4f)
     private val preview: ModelPreview? by lazy { ModelPreview.create(this) }
+    private val hudPreview: HudPreview? by lazy { HudPreview.create(this) }
     private var previewShown = false
+
+    /** This panel's own key: the platform refuses a coalescing key it might share with unrelated work. */
+    private val reading = Any()
 
     init {
         Disposer.register(window.disposable, this)
@@ -224,23 +231,23 @@ class DukeInspectorPanel(override val project: Project, private val window: Tool
         val selectedFile = FileEditorManager.getInstance(project).selectedEditor?.file
         val caret = editor?.takeIf { FileDocumentManager.getInstance().getFile(it.document) == selectedFile }?.caretModel?.offset
         val wanted = wanted
-        ReadAction.nonBlocking<Pair<InspectorModel, PreviewScene?>?> {
+        ReadAction.nonBlocking<Triple<InspectorModel, PreviewScene?, HudScene?>?> {
             val file = selectedFile?.takeIf { it.isValid }?.let { PsiManager.getInstance(project).findFile(it) } as? DukeFile
-            file?.let { InspectorModels.build(it, wanted, caret) }?.let { it to PreviewScenes.of(it) }
+            file?.let { InspectorModels.build(it, wanted, caret) }?.let { Triple(it, PreviewScenes.of(it), HudScenes.of(it)) }
         }
             .inSmartMode(project)
             .withDocumentsCommitted(project)
             .expireWith(this)
-            .coalesceBy(this)
-            .finishOnUiThread(ModalityState.defaultModalityState()) { show(it?.first, it?.second) }
+            .coalesceBy(reading)
+            .finishOnUiThread(ModalityState.defaultModalityState()) { show(it?.first, it?.second, it?.third) }
             .submit(AppExecutorUtil.getAppExecutorService())
     }
 
-    private fun show(next: InspectorModel?, scene: PreviewScene?) {
+    private fun show(next: InspectorModel?, scene: PreviewScene?, hud: HudScene?) {
         // Someone typing in the form keeps what they typed; the form is read again once they are done.
         val owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
         if (owner is JTextComponent && SwingUtilities.isDescendingFrom(owner, column) && owner.getClientProperty("duke.inspector.committed") != owner.text) {
-            alarm.addRequest({ show(next, scene) }, 500)
+            alarm.addRequest({ show(next, scene, hud) }, 500)
             return
         }
         if (next?.file?.element != model?.file?.element) selected = null
@@ -254,19 +261,25 @@ class DukeInspectorPanel(override val project: Project, private val window: Tool
             header.revalidate()
             column.revalidate()
             column.repaint()
-            showPreview(null)
+            showPreview(null, null)
             return
         }
         render(next)
-        showPreview(scene)
+        showPreview(scene, hud)
     }
 
-    /** The block drawn above its form when it has a model or sounds; the form alone when it has neither. */
-    private fun showPreview(scene: PreviewScene?) {
-        val preview = scene?.let { preview }
-        if (splitter.firstComponent !== preview?.component) splitter.firstComponent = preview?.component
-        previewShown = preview != null
-        if (scene != null) preview?.show(scene)
+    /**
+     * The block drawn above its form when it has a model or sounds; the hero's bar when it shapes it, its look or
+     * one of its skins; the form alone when it is none of those.
+     */
+    private fun showPreview(scene: PreviewScene?, hud: HudScene?) {
+        val model = scene?.let { preview }
+        val bar = hud?.takeIf { model == null }?.let { hudPreview }
+        val shown = model?.component ?: bar?.component
+        if (splitter.firstComponent !== shown) splitter.firstComponent = shown
+        previewShown = model != null
+        if (scene != null) model?.show(scene)
+        if (hud != null) bar?.show(hud)
     }
 
     private fun filtered() {

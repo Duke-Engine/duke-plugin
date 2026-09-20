@@ -20,6 +20,8 @@ import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import uz.duke.plugin.assets.AssetKind
+import uz.duke.plugin.assets.DukeAssets
 import uz.duke.plugin.duke.DukeBlock
 import uz.duke.plugin.duke.DukeRecords
 import java.awt.BorderLayout
@@ -238,10 +240,25 @@ internal object Rows {
         return panel
     }
 
+    /** A file of the kinds the key takes; an image picked from a gallery of them, and shown beside its name. */
     private fun path(row: FieldRow, host: RowHost, path: ValueEditor.Path): JComponent {
         val panel = flow()
+        val root = row.place.owner.element?.let(DukeAssets::rootOf)
+        val images = path.files.isNotEmpty() && path.files.all { AssetKind.of(it) == AssetKind.IMAGE }
         lateinit var pick: ActionLink
-        pick = ActionLink(row.written ?: "none") { choose(pick, path.files, row.label, row.written) { set(host, row, it) } }
+        pick = ActionLink(row.written ?: "none") {
+            if (images && root != null) ImageGallery.choose(pick, root, path.files, row.written) { later { set(host, row, it) } }
+            else choose(pick, path.files, row.label, row.written) { set(host, row, it) }
+        }
+        val written = row.written
+        if (images && root != null && written != null) {
+            val thumbnail = JBLabel()
+            fun show() {
+                thumbnail.icon = ImageGallery.thumbnail(root, written, ::show, size = 28)
+            }
+            show()
+            panel.add(thumbnail)
+        }
         panel.add(pick)
         return panel
     }

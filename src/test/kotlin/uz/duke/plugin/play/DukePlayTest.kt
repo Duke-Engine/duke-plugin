@@ -17,11 +17,11 @@ class DukePlayTest {
     fun aMapIsPlayedByTheProjectItIsIn() {
         val root = folder.root.toPath()
         write(root, "settings.gradle.kts", "gradlew.bat", "gradlew", "dungeon/build.gradle.kts")
-        val map = write(root, "dungeon/src/main/resources/data/maps/first.duke")
+        val map = write(root, "dungeon/src/main/resources/maps/first/first.map")
 
         assertEquals(
             "the map told by its path from the project, where run starts",
-            listOf(root.resolve("gradlew.bat").toString(), ":dungeon:run", "--args=--map=src/main/resources/data/maps/first.duke"),
+            listOf(root.resolve("gradlew.bat").toString(), ":dungeon:run", "--args=--map=src/main/resources/maps/first/first.map"),
             DukePlay.commandFor(map, true, true),
         )
         assertEquals(listOf(root.resolve("gradlew").toString(), ":dungeon:run"), DukePlay.commandFor(map, false, false))

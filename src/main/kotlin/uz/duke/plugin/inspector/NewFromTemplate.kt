@@ -61,23 +61,45 @@ internal object NewFromTemplate {
 
     private fun ask(project: Project, word: String, context: DukeFile?) {
         val sources = files(project).flatMap { it.blocks }.filter { it.wordText == word && it.field("Name") != null }
-        val list = gameList(project)
-        val dialog = NewBlockDialog(project, word, sources.map { it.field("Name")!!.valueText.orEmpty() }, context?.virtualFile?.parent, list)
+        // A map is a place rather than a rule: it goes in a folder of its own under maps/, where the game finds
+        // it, and is not listed among the game's files. See uz.duke.core.map.MapPackage.
+        val map = gridOf(project, word)
+        val list = if (map == null) gameList(project) else null
+        val where = if (map == null) context?.virtualFile?.parent else mapsFolder(project, context)
+        val dialog = NewBlockDialog(project, word, sources.map { it.field("Name")!!.valueText.orEmpty() }, where, list)
         if (!dialog.showAndGet()) return
         val source = sources.getOrNull(dialog.sourceIndex - 1)
-        create(project, word, dialog.name, source, dialog.folder, list?.takeIf { dialog.listIt })
+        create(project, word, dialog.name, source, dialog.folder, list?.takeIf { dialog.listIt }, map)
+    }
+
+    /** The component that holds a block's cells, for a word whose record has one: what makes it a map. */
+    private fun gridOf(project: Project, word: String): com.intellij.psi.PsiRecordComponent? {
+        val shape = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.duke.plugin.duke.DukeShape.Record
+        return shape?.record?.recordComponents?.firstOrNull { it.hasAnnotation("uz.duke.core.data.Grid") }
+    }
+
+    /** Where a game keeps its maps: {@code maps/} of the resource root the file being edited is in. */
+    private fun mapsFolder(project: Project, context: DukeFile?): VirtualFile? {
+        val root = context?.let { DukeAssets.rootOf(it) } ?: files(project).firstNotNullOfOrNull { DukeAssets.rootOf(it) }
+        return root?.findChild("maps") ?: root ?: context?.virtualFile?.parent
     }
 
     /** The field that lists the game's files: `Files = [ … ]` of `.duke` paths, in the first block that has one. */
     private fun gameList(project: Project): DukeField? = files(project).flatMap { it.blocks }.mapNotNull { it.field("Files") }
         .firstOrNull { field -> field.values.any { it.unquoted.endsWith(".duke") } }
 
-    private fun create(project: Project, word: String, name: String, source: DukeBlock?, folder: String, list: DukeField?) {
-        val text = if (source != null) copyOf(source, name) else blank(project, word, name)
+    private fun create(project: Project, word: String, name: String, source: DukeBlock?, folder: String, list: DukeField?,
+                       grid: com.intellij.psi.PsiRecordComponent?) {
+        val plain = plainName(name)
+        val text = when {
+            source != null -> copyOf(source, if (grid == null) name else plain)
+            grid == null -> blank(project, word, name)
+            else -> blankMap(project, word, plain, name, grid)
+        }
         var created: VirtualFile? = null
         WriteCommandAction.writeCommandAction(project).withName("New $word $name").run<RuntimeException> {
-            val directory = VfsUtil.createDirectoryIfMissing(folder) ?: return@run
-            val file = directory.createChildData(this, fileName(name))
+            val directory = VfsUtil.createDirectoryIfMissing(if (grid == null) folder else "$folder/$plain") ?: return@run
+            val file = directory.createChildData(this, if (grid == null) fileName(name) else "$plain.map")
             VfsUtil.saveText(file, text)
             created = file
             if (list != null && list.isValid) listIn(project, list, file)
@@ -119,8 +141,40 @@ internal object NewFromTemplate {
         return text + "\n"
     }
 
+    /**
+     * A new map: its name, and a floor to start drawing on — a room of cells inside a border of rock, so the
+     * Map tab opens on something to paint rather than on nothing.
+     */
+    private fun blankMap(project: Project, word: String, name: String, displayName: String,
+                         grid: com.intellij.psi.PsiRecordComponent): String {
+        val solid = DukeRecords.constantString(grid.getAnnotation("uz.duke.core.data.Grid")?.findAttributeValue("solid"))
+            ?.firstOrNull() ?: '#'
+        val record = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.duke.plugin.duke.DukeShape.Record
+        val titled = record?.record?.let { DukeRecords.component(it, "displayName") } != null
+        val rows = (0 until STARTER_ROWS).map { row ->
+            if (row == 0 || row == STARTER_ROWS - 1) solid.toString().repeat(STARTER_COLUMNS)
+            else solid + "0".repeat(STARTER_COLUMNS - 2) + solid
+        }
+        return buildString {
+            append(word).append('\n')
+            append("  Name = ").append(name).append('\n')
+            if (titled) append("  DisplayName = ").append(displayName).append('\n')
+            append("  ").append(DukeRecords.capitalized(grid.name)).append(" = [\n")
+            rows.forEach { append("    \"").append(it).append("\",\n") }
+            append("  ]\n")
+            append("End\n")
+        }
+    }
+
+    /** How big a map starts: a room somebody can walk across, and small enough to see whole. */
+    private const val STARTER_COLUMNS = 32
+    private const val STARTER_ROWS = 20
+
     /** `SkeletonHealer` as a file is named: `skeleton_healer.duke`. */
-    fun fileName(name: String) = name.replace(Regex("([a-z0-9])([A-Z])"), "$1_$2").lowercase() + ".duke"
+    fun fileName(name: String) = plainName(name) + ".duke"
+
+    /** The same, as a name for a file or a folder: `SkeletonHealer` is `skeleton_healer`. */
+    fun plainName(name: String) = name.replace(Regex("([a-z0-9])([A-Z])"), "$1_$2").lowercase()
 }
 
 private class NewBlockDialog(

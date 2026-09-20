@@ -1,7 +1,7 @@
 // A block as the game draws it: its model, dressed as the client dresses a unit — the texture over it, the
 // tint, what it carries on which bone — moving by the clips its fields name, and the sounds that are its.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loader, res, dress, hang, skin } from './common.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const view = document.getElementById('view');
@@ -25,7 +25,6 @@ world.add(sun);
 let grid = new THREE.GridHelper(10, 10);
 world.add(grid);
 
-const loader = new GLTFLoader();
 const clock = new THREE.Clock();
 
 let body = null;
@@ -37,9 +36,6 @@ let actions = [];
 let chosen = null;
 let chosenLabel = null;
 let audio = null;
-
-/** A path from the resource root, as the IDE serves it. */
-const res = path => '../res/' + path.split('/').map(encodeURIComponent).join('/');
 
 function resize() {
   const width = view.clientWidth;
@@ -102,20 +98,14 @@ async function load(scene) {
     const gltf = await loader.loadAsync(res(scene.model));
     if (generation !== loads) return;
     const model = gltf.scene;
-    let skin = null;
+    let texture = null;
     if (scene.texture) {
-      try {
-        skin = await new THREE.TextureLoader().loadAsync(res(scene.texture));
-        // A glTF model's UVs count down from the top of its picture: a skin named for it is read that way too.
-        skin.flipY = false;
-        skin.colorSpace = THREE.SRGBColorSpace;
-      } catch {
-        problems.push(`no texture ${scene.texture}`);
-      }
+      texture = await skin(scene.texture);
+      if (!texture) problems.push(`no texture ${scene.texture}`);
       if (generation !== loads) return;
     }
     const tint = new THREE.Color(scene.tint ?? '#ffffff');
-    dress(model, skin, tint);
+    dress(model, texture, tint);
     for (const held of scene.held) {
       const problem = await hang(model, held, tint);
       if (generation !== loads) return;
@@ -139,43 +129,6 @@ async function load(scene) {
     start();
   } catch {
     if (generation === loads) status.textContent = `Could not load ${scene.model}`;
-  }
-}
-
-/**
- * Plain lighting over the colour map, times the tint, as the game draws a creature: its client lights no PBR
- * material, so a preview that did would show something the game does not. Skinning needs nothing of the material.
- */
-function dress(object, skin, tint) {
-  object.traverse(node => {
-    if (!node.isMesh) return;
-    const dressed = (Array.isArray(node.material) ? node.material : [node.material]).map(material => new THREE.MeshLambertMaterial({
-      map: skin ?? material.map ?? null,
-      color: tint,
-      transparent: material.transparent,
-      alphaTest: material.alphaTest,
-      side: material.side,
-    }));
-    node.material = Array.isArray(node.material) ? dressed : dressed[0];
-  });
-}
-
-/** One carried model on its bone: turned, moved and sized as the block says. A problem is said, not thrown. */
-async function hang(model, held, tint) {
-  // The loader names nodes as animation tracks do, without the dots: `handslot.r` is `handslotr`.
-  const bone = model.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(held.bone));
-  if (!bone) return `no bone ${held.bone}`;
-  try {
-    const thing = (await loader.loadAsync(res(held.model))).scene;
-    dress(thing, null, tint);
-    const degrees = THREE.MathUtils.degToRad;
-    thing.scale.setScalar(held.scale);
-    thing.rotation.set(degrees(held.pitch), degrees(held.yaw), degrees(held.roll), 'YZX');
-    thing.position.set(held.x, held.y, held.z);
-    bone.add(thing);
-    return null;
-  } catch {
-    return `no model ${held.model}`;
   }
 }
 

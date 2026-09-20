@@ -116,20 +116,64 @@ each sound named for the block (`died.Skeleton` for the Skeleton), or for the bl
 The page's files are served to the browser in-process; nothing listens on a port. It draws with
 [three.js](https://threejs.org) (MIT), taken out of its webjar when the plugin is built.
 
+Over the client's `PanelLook` — the hero's bar: which blocks, in what order, how big its sockets are, every
+colour — and over each skin of it (a block with a `Name`, a `Texture`, an `Inset`, a `Scale` and a `Tint`, as the
+game's `Skin` is), the preview is the bar itself, laid out as the client lays it out and painted with every skin
+the game names, each picture cut into nine as the client cuts it; the skin being edited is outlined wherever it
+goes, and a banner's is drawn on its plaque. A look that hangs blocks from the window's corners — `Places =
+[Minimap TopRight 12 12]` — is drawn as the whole screen instead, each block on its own plate where it will hang. So a border is chosen by picking its picture from the gallery beside
+the `Texture` field and seeing it on the bar at once, and its `Tint` with a colour picker, as every colour field is.
+
 ### Map
 
-A `.duke` file whose block has a component marked `@Grid` — a map's rows of cells — opens with a **Map** tab
-beside its text: the cells from above, rock dark and floor lighter a storey up, the rooms outlined, and every
-thing on the map drawn where it stands. Things are read by the shape of the record: a component holding a record
-with an `x` and a `y` is a thing, or a list of them — `Entrance = [9, 28]`, `Boss = Warden 8 5`,
+A file whose block has a component marked `@Grid` — a map's rows of cells — opens with a **Map** tab beside its
+text. Maps are kept as `.map` files, read in the same language as `.duke` and named apart from it because a map
+is a place rather than a rule: one folder a map, `maps/<name>/<name>.map`, with its `preview.png` and any `.duke`
+files of its own beside it. **New from Template** on a map's record writes that whole folder, with a floor inside
+a border of rock to start drawing on, and does not list it among the game's files — the game finds it by its
+being there. The tab shows: the map in 3D as the game's client draws it — floor, walls and stairs laid from the theme the game
+gives a map of that `Difficulty`, the tone its seed draws, under the world's `Sun`, bent over its relief — and
+every thing on the map in the model its block gives it, or a marker where it has none. Right drag turns the camera,
+middle drag slides it, the wheel brings it nearer. Things are read by the shape of the record: a component holding
+a record with an `x` and a `y` is a thing, or a list of them — `Entrance = [9, 28]`, `Boss = Warden 8 5`,
 `Monsters = [Skeleton 17 16, …]` — and the kinds a thing may be are the blocks its `@Link` names (the first word
-of `Warden 8 5` is the Monster it links). A click puts down what the tool says, a drag moves a thing, a right
-click takes one off, and a click on a thing makes it the tool. Each is a line of the file changed, one undoable
-command, and the Text tab shows it. A new map is drawn from a seed by the game — `./gradlew :dungeon:newMap
---args="crypt 42"` — and filled here.
+of `Warden 8 5` is the Monster it links).
+
+The tool on the left of the tab says what the left button does:
+
+| Tool | What a click or a stroke does |
+|---|---|
+| Put down | puts down the list and kind chosen beside it; a drag moves a thing, a click on one makes it the tool |
+| Take off | takes off what stands on the cell (a right click does, with any tool; so does Delete) |
+| Raise / Lower / Smooth / Flatten ground | the relief under the brush, as big and as strong as the tool says |
+| Paint floor / rock / stair | the cells the stroke passes over: floor at the storey chosen, rock, or a stair |
+
+Each is lines of the file changed, one undoable command, and the Text tab shows it: a thing is its line, a stroke
+over the ground the rows of the component marked `@Relief` it changed — a whole number of steps, a sixteenth of a
+cell, at each corner of a cell (added under the cells when the map has none), and a stroke of paint the rows of
+cells it passed over. Rock is not painted under a thing. Where the IDE runs without its browser the tab draws the
+map from above, a square a cell, and takes the same clicks. A new map is drawn from a seed by the game —
+`./gradlew :dungeon:newMap --args="crypt 42"` — and filled here.
+
+A map is **checked where it is drawn**, so what the engine would refuse it for is read on the line that says it
+rather than in a list when the game is started: a thing off the edge of the map, a thing inside stone, rows of
+different widths (a short one reads as stone to its right), a ground that is not a corner of every cell. Two
+things on one cell is a warning, not an error — the editor puts down one thing to a cell, and whether a game
+allows two is the game's rule. Only what any map means is checked; what a particular game asks of its maps is
+still the game's to say when it loads one.
+
+**Save Preview** (on the tab) writes `preview.png` into the map's folder — the map from above, a square a cell,
+with what stands on it marked — which is what the screen a map is chosen on shows of it. The game writes the same
+picture for a map it draws (`./gradlew :dungeon:newMap`), and for maps already drawn
+(`./gradlew :dungeon:writeMapPreviews`), so a map has one whether or not it was ever opened here.
+
+**Resize Map…** (on the tab) makes the map bigger or smaller: the new size, and which
+corner the floor keeps. Growing fills with rock and moves everything on the map with the floor it stands on —
+the way in, the monsters, the props, the rooms and the relief with them. Nothing is ever cut off: a size too small
+for what stands on it is refused, and says which of them would fall outside.
 
 **Play** (▶ on the Map tab, and in the Inspector) saves every file and runs the game's own Gradle `run` task in
-the Run window, told the map being edited by its file — `--args=--map=src/main/resources/data/maps/first.duke` —
+the Run window, told the map being edited by its file — `--args=--map=src/main/resources/maps/first/first.map` —
 or from its start for any other block. The game reads the map from disk, so one drawn a minute ago plays before
 it is listed anywhere; stop and rerun it from the Run window.
 

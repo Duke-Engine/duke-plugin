@@ -36,7 +36,7 @@ val viewerLibraries = tasks.register<Sync>("viewerLibraries") {
         include(
             "$version/LICENSE", "$version/build/three.module.js", "$version/build/three.core.js",
             "$version/examples/jsm/loaders/GLTFLoader.js", "$version/examples/jsm/utils/BufferGeometryUtils.js",
-            "$version/examples/jsm/controls/OrbitControls.js",
+            "$version/examples/jsm/controls/OrbitControls.js", "$version/examples/jsm/utils/SkeletonUtils.js",
         )
         eachFile { relativePath = RelativePath(true, "viewer", "three", *relativePath.segments.drop(5).toTypedArray()) }
     }

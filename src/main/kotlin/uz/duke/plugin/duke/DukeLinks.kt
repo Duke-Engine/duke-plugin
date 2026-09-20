@@ -64,6 +64,18 @@ object DukeLinks {
     /** Every block at the top of the project's data files that gives itself a name, whatever its record. */
     fun namedBlocks(context: PsiElement): List<Pair<String, DukeBlock>> = everyNamedBlock(context).values.flatMap { it.toList() }
 
+    /** Every block at the top of the project's files, named or not — the one `Sun` a game lights its maps by is not. */
+    fun everyBlock(context: PsiElement): List<DukeBlock> {
+        val project = context.project
+        return CachedValuesManager.getManager(project).getCachedValue(project) {
+            val psi = PsiManager.getInstance(project)
+            val blocks = FileTypeIndex.getFiles(DukeFileType, GlobalSearchScope.projectScope(project))
+                .mapNotNull { psi.findFile(it) as? DukeFile }
+                .flatMap { it.blocks }
+            CachedValueProvider.Result.create(blocks, PsiModificationTracker.getInstance(project))
+        }
+    }
+
     private fun everyNamedBlock(context: PsiElement): Map<String, Map<String, DukeBlock>> {
         val project = context.project
         return CachedValuesManager.getManager(project).getCachedValue(project) {

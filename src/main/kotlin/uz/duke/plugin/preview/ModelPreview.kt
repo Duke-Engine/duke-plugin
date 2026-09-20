@@ -20,6 +20,7 @@ import org.cef.handler.CefResourceRequestHandlerAdapter
 import org.cef.misc.BoolRef
 import org.cef.misc.IntRef
 import org.cef.misc.StringRef
+import org.cef.network.CefPostDataElement
 import org.cef.network.CefRequest
 import org.cef.network.CefResponse
 import java.awt.Color
@@ -28,16 +29,35 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.swing.JComponent
 
-/**
- * A page of the IDE's own browser that draws and plays a [PreviewScene]. Its files are served in-process to
- * `http://duke.preview/`, a host that exists only for this browser: nothing listens on a port, nothing leaves
- * the machine.
- */
+/** A page of the IDE's own browser that draws and plays a [PreviewScene]. */
 class ModelPreview private constructor(parent: Disposable) {
+    private val page = DukeBrowser(parent, "viewer/index.html") { _, _ -> }
+
+    val component: JComponent get() = page.component
+
+    fun show(scene: PreviewScene) {
+        page.root = Path.of(scene.root).normalize()
+        page.call("show", "duke.show(${scene.json()}, ${DukeBrowser.colours()})")
+    }
+
+    fun play(clip: String) = page.call("play", "duke.play(${Json.string(clip)})")
+
+    companion object {
+        /** A preview, or null where the IDE runs without its browser. */
+        fun create(parent: Disposable): ModelPreview? = if (JBCefApp.isSupported()) ModelPreview(parent) else null
+    }
+}
+
+/**
+ * A page of the IDE's own browser, served in-process from `http://duke.preview/` — a host that exists only for this
+ * browser, so nothing listens on a port and nothing leaves the machine: the plugin's `viewer/`, the game's resource
+ * root under `res/`, and what the page posts to `do/<what>`, handed to [act] with its body on the UI thread.
+ */
+class DukeBrowser(parent: Disposable, page: String, private val act: (String, String) -> Unit) {
     private val browser = JBCefBrowser()
 
     @Volatile
-    private var root: Path? = null
+    var root: Path? = null
     private var ready = false
 
     /** The last of each kind of call made before the page was there to take it. */
@@ -53,6 +73,14 @@ class ModelPreview private constructor(parent: Disposable) {
                 requestInitiator: String?, disableDefaultHandling: BoolRef?,
             ): CefResourceRequestHandler? {
                 val path = PreviewFiles.pathOf(request?.url) ?: return null
+                if (path.startsWith("do/")) {
+                    val body = bodyOf(request)
+                    ApplicationManager.getApplication().invokeLater { act(path.removePrefix("do/"), body) }
+                    return object : CefResourceRequestHandlerAdapter() {
+                        override fun getResourceHandler(browser: CefBrowser?, frame: CefFrame?, request: CefRequest?): CefResourceHandler =
+                            Served(ByteArray(0), "text/plain")
+                    }
+                }
                 return object : CefResourceRequestHandlerAdapter() {
                     override fun getResourceHandler(browser: CefBrowser?, frame: CefFrame?, request: CefRequest?): CefResourceHandler =
                         Served(PreviewFiles.bytes(path, root), PreviewFiles.mime(path))
@@ -69,36 +97,38 @@ class ModelPreview private constructor(parent: Disposable) {
                 }
             }
         }, browser.cefBrowser)
-        browser.loadURL(PreviewFiles.ORIGIN + "viewer/index.html")
+        browser.loadURL(PreviewFiles.ORIGIN + page)
     }
 
-    fun show(scene: PreviewScene) {
-        root = Path.of(scene.root).normalize()
-        call("show", "duke.show(${scene.json()}, ${colours()})")
-    }
-
-    fun play(clip: String) = call("play", "duke.play(${Json.string(clip)})")
-
-    private fun call(kind: String, code: String) {
+    /** [code] run in the page once it is there; a later call of the same [kind] made before then replaces this one. */
+    fun call(kind: String, code: String) {
         if (ready) run(code) else waiting[kind] = code
     }
 
     private fun run(code: String) = browser.cefBrowser.executeJavaScript(code, browser.cefBrowser.url, 0)
 
-    /** The tool window's own colours, for the page to be drawn in. */
-    private fun colours(): String = Json.of(mapOf(
+    /** What a page posted: its body, as text. */
+    private fun bodyOf(request: CefRequest?): String {
+        val elements = java.util.Vector<CefPostDataElement>()
+        request?.postData?.getElements(elements)
+        return elements.joinToString("") { element ->
+            val bytes = ByteArray(element.bytesCount)
+            element.getBytes(bytes.size, bytes)
+            String(bytes, Charsets.UTF_8)
+        }
+    }
+
+    companion object {
+        /** The tool window's own colours, for a page to be drawn in. */
+        fun colours(): String = Json.of(mapOf(
         "background" to css(UIUtil.getPanelBackground()),
         "foreground" to css(UIUtil.getLabelForeground()),
         "muted" to css(UIUtil.getContextHelpForeground()),
         "border" to css(JBColor.border()),
         "accent" to css(JBUI.CurrentTheme.Focus.focusColor()),
-    ))
+        ))
 
-    private fun css(colour: Color) = "#%06X".format(colour.rgb and 0xFFFFFF)
-
-    companion object {
-        /** A preview, or null where the IDE runs without its browser. */
-        fun create(parent: Disposable): ModelPreview? = if (JBCefApp.isSupported()) ModelPreview(parent) else null
+        private fun css(colour: Color) = "#%06X".format(colour.rgb and 0xFFFFFF)
     }
 }
 

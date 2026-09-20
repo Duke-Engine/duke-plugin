@@ -13,13 +13,23 @@ import uz.duke.plugin.duke.DukeRecords
 import uz.duke.plugin.inspector.DukeEdits
 import uz.duke.plugin.inspector.InspectorModels
 
-/** A map as its editor draws it: the rows of its grid, the areas cut out of it, and each thing standing on it. */
+/**
+ * A map as its editor draws it: the rows of its grid, the relief over them, the areas cut out of it, and each thing
+ * standing on it.
+ */
 class MapModel(
     val block: SmartPsiElementPointer<DukeBlock>,
     val title: String,
+    /** The component its `@Grid` marks, and the one its `@Relief` does, as the file writes them. */
+    val gridKey: String,
+    val reliefKey: String?,
     val rows: List<String>,
+    /** The relief's rows as the file writes them, a whole number a corner; null where it has none. */
+    val relief: List<String>?,
     val solid: String,
     val areas: List<Area>,
+    /** The areas as a layer of their own, for the one thing that moves them: the map being made bigger or smaller. */
+    val areaLayer: Layer?,
     val layers: List<Layer>,
     /** The record's components in order, for where a new line goes. */
     val order: List<String>,
@@ -36,6 +46,21 @@ class MapModel(
         layers.sortedBy { !it.single }.flatMap { layer -> layer.things.filter { it.x == x && it.y == y }.map { layer to it } }
 
     fun areaAt(x: Int, y: Int): Area? = areas.firstOrNull { x >= it.x && x < it.x + it.width && y >= it.y && y < it.y + it.height }
+
+    /**
+     * What a map of this size, with its floor moved by this much, would leave outside itself — said rather than
+     * cut, because a thing quietly dropped is a monster somebody placed this morning and will look for tonight.
+     */
+    fun outside(width: Int, height: Int, dx: Int, dy: Int): List<String> {
+        val things = layers.flatMap { layer ->
+            layer.things.filter { it.x + dx !in 0 until width || it.y + dy !in 0 until height }
+                .map { "${it.kind ?: layer.label} at ${it.x}, ${it.y}" }
+        }
+        val rooms = areas.filter {
+            it.x + dx < 0 || it.y + dy < 0 || it.x + dx + it.width > width || it.y + dy + it.height > height
+        }.map { "room ${it.index}" }
+        return things + rooms
+    }
 }
 
 /** A rectangle of the map — a room — drawn with its place in its list, and not edited here. */
@@ -78,6 +103,7 @@ class Thing(val kind: String?, val x: Int, val y: Int, val index: Int, val words
 
 object MapModels {
     private const val GRID = "uz.duke.core.data.Grid"
+    private const val RELIEF = "uz.duke.core.data.Relief"
 
     /** The first block of [file] whose record has a component marked `@Grid`, with that component. */
     fun gridOf(file: DukeFile): Pair<DukeBlock, PsiRecordComponent>? {
@@ -96,6 +122,7 @@ object MapModels {
         val rows = block.field(key(grid))?.values?.map { it.unquoted }.orEmpty()
         val areas = mutableListOf<Area>()
         val layers = mutableListOf<Layer>()
+        var areaLayer: Layer? = null
         for (component in record.recordComponents) {
             if (component == grid) continue
             val shape = DukeRecords.blockClass(component.type)?.takeIf { it.isRecord } ?: continue
@@ -113,9 +140,16 @@ object MapModels {
                 else -> listOfNotNull(field.valueText?.let(::words))
             }
             if ("width" in parts && "height" in parts) {
-                written.forEachIndexed { index, words ->
+                val corners = written.mapIndexed { index, words ->
                     fun part(name: String) = words.getOrNull(parts.indexOf(name))?.toIntOrNull() ?: 0
                     areas += Area(index, part("x"), part("y"), part("width"), part("height"))
+                    Thing(null, part("x"), part("y"), if (many) index else -1, words)
+                }
+                // Not a layer anything is put down in — a room is the generator's — but one that can be moved,
+                // which is what a map growing or shrinking does to every one of them.
+                if (areaLayer == null) {
+                    areaLayer = Layer(key(component), InspectorModels.humanize(key(component)), !many, null, emptyMap(),
+                        parts, -1, tuple, corners)
                 }
                 continue
             }
@@ -133,7 +167,10 @@ object MapModels {
         }
         val pointer = SmartPointerManager.getInstance(file.project).createSmartPsiElementPointer(block)
         val title = block.field("DisplayName")?.valueText ?: block.field("Name")?.valueText ?: block.wordText
-        return MapModel(pointer, title, rows, solid, areas, layers, record.recordComponents.map(::key))
+        val relief = record.recordComponents.firstOrNull { it.hasAnnotation(RELIEF) }?.let(::key)
+        val corners = relief?.let { block.field(it)?.values?.map { value -> value.unquoted } }
+        return MapModel(pointer, title, key(grid), relief, rows, corners, solid, areas, areaLayer, layers,
+            record.recordComponents.map(::key))
     }
 
     private fun key(component: PsiRecordComponent) = DukeRecords.capitalized(component.name)
@@ -167,6 +204,65 @@ object MapEdits {
         val block = map.block.element ?: return
         if (layer.single) block.field(layer.key)?.let { DukeEdits.removeLines(document, it) }
         else DukeEdits.removeItem(document, block, layer.key, map.order, thing.index)
+    }
+
+    /** Cells of the grid, each at its `x` and `y`, made what it says: only the rows they fall in change in the file. */
+    fun paint(document: Document, map: MapModel, cells: List<Triple<Int, Int, Char>>) {
+        val block = map.block.element ?: return
+        val rows = map.rows.toMutableList()
+        for ((x, y, char) in cells) {
+            val row = rows.getOrNull(y)?.takeIf { x in it.indices } ?: continue
+            rows[y] = row.substring(0, x) + char + row.substring(x + 1)
+        }
+        DukeEdits.setRows(document, block, map.gridKey, map.order, rows)
+    }
+
+    /**
+     * The map at another size: its cells and its relief rewritten, and everything standing on it moved with the
+     * floor under it — [dx] and [dy] being where the old map's top-left corner lands in the new one.
+     *
+     * <p>What is grown is rock, because an editor that filled new ground with floor would be drawing the map for
+     * its author. Nothing is cut: a thing that would fall outside is refused before this is called — see
+     * [MapModel.outside] — so a monster placed this morning is never quietly dropped.
+     */
+    fun resize(project: Project, document: Document, map: MapModel, width: Int, height: Int, dx: Int, dy: Int) {
+        val documents = PsiDocumentManager.getInstance(project)
+        val rock = map.solid.firstOrNull() ?: '#'
+        val rows = (0 until height).map { y ->
+            val was = map.rows.getOrNull(y - dy)
+            (0 until width).map { x -> was?.getOrNull(x - dx) ?: rock }.joinToString("")
+        }
+        map.block.element?.let { DukeEdits.setRows(document, it, map.gridKey, map.order, rows) } ?: return
+        documents.commitDocument(document)
+        val relief = map.relief
+        if (relief != null && map.reliefKey != null) {
+            // One more row and one more number a row than there are cells: the corners, not the cells.
+            val corners = relief.map { it.trim().split(' ').filter(String::isNotEmpty) }
+            val moved = (0..height).map { y ->
+                val was = corners.getOrNull(y - dy)
+                (0..width).joinToString(" ") { x -> was?.getOrNull(x - dx) ?: "0" }
+            }
+            map.block.element?.let { DukeEdits.setRows(document, it, map.reliefKey, map.order, moved) }
+            documents.commitDocument(document)
+        }
+        if (dx == 0 && dy == 0) {
+            return // the floor did not move, so nothing standing on it did either
+        }
+        for (layer in map.layers + listOfNotNull(map.areaLayer)) {
+            for (thing in layer.things) {
+                val block = map.block.element ?: return
+                val text = layer.write(thing.kind, thing.x + dx, thing.y + dy, thing.words)
+                if (layer.single) DukeEdits.setValue(document, block, layer.key, map.order, text)
+                else DukeEdits.setItem(document, block, layer.key, thing.index, text)
+            }
+            documents.commitDocument(document)
+        }
+    }
+
+    /** The relief as [rows], each a line of whole numbers, a corner each: written where the file keeps it, or added. */
+    fun shape(document: Document, map: MapModel, rows: List<String>) {
+        val block = map.block.element ?: return
+        DukeEdits.setRows(document, block, map.reliefKey ?: return, map.order, rows)
     }
 
     /** The things of the lists on a cell taken off it, the last of each list first so the ones before keep their place. */

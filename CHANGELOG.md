@@ -38,8 +38,28 @@
 - **Preview** above the Inspector's form: a block's model dressed as the game dresses it, its clips on buttons, and
   its sounds — played in the IDE's own browser with three.js, from the game's files.
 - **Add Sound…**: a sound for a moment of the block's (`died.Skeleton`), copied from the last one for that moment.
-- **Map** tab for a block with a `@Grid`: its cells, rooms and things drawn from above; things put down, moved and
-  taken off by hand, each as a line of the file. Replaces the separate world builder.
+- **Map** tab for a block with a `@Grid`: the map in 3D as the game draws it — its theme's floor and walls, the
+  world's sun, its relief, and each thing in its own model — with a camera to turn and move; things put down, moved
+  and taken off by hand, each as a line of the file; the ground raised, lowered, smoothed and flattened with a brush,
+  and cells painted floor, rock or stair, each stroke as the rows it changed. From above where the IDE has no
+  browser. Replaces the separate world builder.
+- An image field's value picked from a gallery of the game's pictures, each shown small, beside the path.
+- The hero's bar over its `PanelLook` and over each of its skins: laid out, coloured and framed as the client draws
+  it, the skin being edited outlined where it goes — a border picked from the gallery is seen on the bar at once.
+  A look that hangs blocks from the window's corners is drawn as the whole screen, each where it will hang.
+- A `…Tint` field is a colour, with a colour picker, as a `…Colour` field is.
+- `.map` files are read as Duke files, and a map made from a template is written as its own folder —
+  `maps/<name>/<name>.map` with a floor to start on — rather than as a data file listed in the game's files.
+- A map checked where it is drawn: a thing off the edge or inside stone, rows of different widths, a ground that
+  is not a corner of every cell — each on the line that says it, rather than in a list when the game is started.
+  Two things on one cell is a warning, being a rule a game makes rather than something a map cannot mean.
+- **Save Preview** on the Map tab: `preview.png` written into the map's folder — the map from above, a square a
+  cell — which is what a screen listing the maps shows of it.
+- **Resize Map…** on the Map tab: a map made bigger or smaller, from whichever corner is kept. What it grows into
+  is rock, and everything on the map moves with the floor it stands on — the way in, the things, the rooms and the
+  relief. A size too small is refused, saying which of them would fall outside.
+- A list of things written one to a line may be written as blocks instead, for a thing with more to say than a
+  line holds; the editor still writes lines.
 - **Play**: the game run from the IDE — on the map being edited, or from its start — in the Run window.
 - A path is found under any resource root of the project, as the classpath finds it: a game's file may name the
   kit's (`kit/effects/particles/star_04.png`).

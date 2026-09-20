@@ -67,6 +67,26 @@ object DukeEdits {
         if (!trailing) document.insertString(last.textRange.endOffset, ",")
     }
 
+    /**
+     * A grid's rows, one a line: the ones that differ rewritten where they stand — the others, and any comment among
+     * them, left as they are — or the whole list written, `Key = [`, a row a line, `]`, where there was none or it held
+     * another count of rows.
+     */
+    fun setRows(document: Document, owner: DukeBlock, key: String, order: List<String>, rows: List<String>) {
+        val field = owner.field(key)
+            ?: return insertLines(document, owner, key, order, listOf("$key = [") + rows.map { "  ${inQuotes(it)}," } + "]")
+        val items = field.list?.items
+        if (items == null || items.size != rows.size) {
+            val indent = indentOf(document, field.textRange.startOffset)
+            return replaceValue(document, field, "[\n" + rows.joinToString("") { "$indent  ${inQuotes(it)},\n" } + "$indent]")
+        }
+        // The last first, so each row before it is still where the file was read to have it.
+        for (index in rows.indices.reversed()) {
+            val range = items[index].textRange
+            if (items[index].unquoted != rows[index]) document.replaceString(range.startOffset, range.endOffset, inQuotes(rows[index]))
+        }
+    }
+
     /** The item at [index] of the list [key] holds, rewritten. */
     fun setItem(document: Document, owner: DukeBlock, key: String, index: Int, item: String) {
         val range = owner.field(key)?.list?.items?.getOrNull(index)?.textRange ?: return
@@ -174,8 +194,11 @@ object DukeEdits {
     /** A value as a file keeps it: quoted where a `;` would start a comment, a quote end it, or a `[` open a list. */
     fun quoted(text: String): String {
         if (text.isNotEmpty() && text.none { it == ';' || it == '"' } && !text.startsWith("[") && text == text.trim()) return text
-        return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        return inQuotes(text)
     }
+
+    /** A value in quotes whatever is in it, as a grid's rows are written. */
+    private fun inQuotes(text: String) = "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     // ---- where things go ----
 
