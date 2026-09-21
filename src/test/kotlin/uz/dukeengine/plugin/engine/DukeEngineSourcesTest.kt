@@ -1,6 +1,7 @@
 package uz.dukeengine.plugin.engine
 
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiRecordComponent
@@ -141,7 +142,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
 
     /** The preview of a real unit: dressed as the client dresses it, moving by its clips, with the sounds named for it. */
     fun testThePreviewDrawsARealUnitAsTheGameDoes() {
-        val resources = myFixture.copyDirectoryToProject("dungeon/src/main/resources/animations", "res/animations").parent
+        val resources = copySampleAnimations()
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
             val files = listOf("animations/humanoid.duke", "units/skeleton_mage.duke", "units/skeleton.duke", "sounds/sfx.duke").associateWith {
@@ -170,7 +171,7 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
      * out of the files, so any file with clips in it works. The link opens the set; a wrong one is said.
      */
     fun testAClipIsOneOfTheClipsTheFilesItMovesByHold() {
-        val resources = myFixture.copyDirectoryToProject("dungeon/src/main/resources/animations", "res/animations").parent
+        val resources = copySampleAnimations()
         PsiTestUtil.addSourceRoot(module, resources, JavaResourceRootType.RESOURCE)
         try {
             myFixture.addFileToProject("res/data/animations/humanoid.duke",
@@ -243,6 +244,20 @@ class DukeEngineSourcesTest : LightJavaCodeInsightFixtureTestCase() {
                 .filter { it.extension == "duke" || it.extension == "map" }.map { resources to it } }
         assertTrue("no data files found next to the plugin", files.size >= 40)
         return files.map { (resources, file) -> myFixture.addFileToProject(file.relativeTo(resources).invariantSeparatorsPath, file.readText()) }
+    }
+
+    /**
+     * The sample game's animation files, copied in. Its folder is found rather than named, for the reason
+     * `setUp` gives: once the repositories are split the game is no longer a folder of the engine's, so a
+     * path written from the engine's root points at nothing.
+     */
+    private fun copySampleAnimations(): VirtualFile {
+        myFixture.testDataPath = Repos.sample.parentFile.canonicalPath
+        try {
+            return myFixture.copyDirectoryToProject("${Repos.sample.name}/src/main/resources/animations", "res/animations").parent
+        } finally {
+            myFixture.testDataPath = Repos.engine.canonicalPath
+        }
     }
 
     private fun classAt(text: String): String? {
