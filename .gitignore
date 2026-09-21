@@ -2,3 +2,5 @@
 .idea
 .intellijPlatform
 build
+# Checkouts the CI puts beside the tests (see .github/workflows/ci.yml)
+.repos/

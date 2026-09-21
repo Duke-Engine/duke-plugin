@@ -1,0 +1,264 @@
+# The gate on master, and the release when a version is tagged.
+#
+# The plugin is an IntelliJ plugin: what a release produces is one zip, attached
+# to a GitHub Release for anyone installing it by hand, and pushed to the
+# JetBrains Marketplace for everyone else.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The tag is the version. What it builds is whatever `version` says in
+# gradle.properties, so the two are kept in step by hand — a tag that disagrees
+# with the properties file builds the properties file's version, not the tag's.
+#
+# The GitHub Release needs no secrets and always happens. The Marketplace needs
+# four, and when they are not set that job says so and stops without failing the
+# release: a repository without the keys is a repository that can still cut a
+# release, which is what lets this file work unchanged in a fork.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write # the release job creates a release and uploads to it
+
+concurrency:
+  # One run per branch or tag. A second push while the first is still running
+  # cancels it — except for tags, where a cancelled run is a half-made release.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The gate. Runs on everything, including pull requests.
+  #
+  # The tests read two checkouts off the disk rather than fixtures written to
+  # agree with them: the engine, for the records a `.duke` block is bound to, and
+  # a game, for real data to run the checks over. `Repos` finds them by
+  # DUKE_ENGINE and DUKE_SAMPLE, so CI says where it put them and the same tests
+  # pass here and on a laptop.
+  #
+  # One runner, not three: the plugin is platform-independent and the IntelliJ
+  # Platform is a slow download to repeat twice for nothing.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the engine
+        uses: actions/checkout@v4
+        with:
+          repository: Duke-Engine/duke-engine
+          path: .repos/duke-engine
+
+      - name: Check out a game to read
+        uses: actions/checkout@v4
+        with:
+          repository: Duke-Engine/duke-dungeon
+          path: .repos/duke-dungeon
+
+      # 21, not 25: the 2025.3 platform runs on 21, and building with a newer
+      # JAVA_HOME emits classes it cannot load. build.gradle.kts pins the
+      # toolchain to the same number.
+      - name: Install Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test
+        run: ./gradlew build --no-daemon --stacktrace
+        env:
+          DUKE_ENGINE: ${{ github.workspace }}/.repos/duke-engine
+          DUKE_SAMPLE: ${{ github.workspace }}/.repos/duke-dungeon
+
+      - name: Keep the reports when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # What JetBrains checks before it takes a plugin. Only for a tag: it downloads
+  # a whole IDE to run the plugin against, which is minutes rather than seconds.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify against the IDEs
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify
+        run: ./gradlew verifyPlugin --no-daemon --stacktrace
+
+      - name: Keep the report either way
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-verifier
+          path: build/reports/pluginVerifier/**
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # The release: one per tag, holding the zip somebody installs from disk.
+  #
+  # Needs nothing but the token GitHub hands every workflow, so a tag always
+  # produces a release even when the Marketplace is not set up.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish the release
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the notes are written from the log since the last tag
+
+      - name: Install Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the zip
+        id: zip
+        run: |
+          ./gradlew buildPlugin --no-daemon --stacktrace
+          VERSION="${GITHUB_REF_NAME#v}"
+          ls -la build/distributions
+          test -n "$(ls build/distributions/*.zip 2>/dev/null)" \
+            || { echo "buildPlugin made no zip"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Write the notes
+        run: |
+          PREVIOUS=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          {
+            echo '## What changed'
+            echo
+            if [ -n "$PREVIOUS" ]; then
+              git log --no-merges --pretty='- %s' "$PREVIOUS..HEAD"
+            else
+              git log --no-merges --pretty='- %s' -20
+            fi
+            echo
+            echo '## Installing it'
+            echo
+            echo 'From inside the IDE, which is where it should come from:'
+            echo 'Settings -> Plugins -> Marketplace, and search for Duke.'
+            echo
+            echo 'Or from the zip below, for a version the Marketplace has not taken yet:'
+            echo 'Settings -> Plugins -> the gear -> Install Plugin from Disk.'
+            echo
+            echo 'Needs IntelliJ IDEA 2025.3 or newer.'
+          } > notes.md
+          cat notes.md
+
+      # gh, rather than one of the release actions: it is on the runner already,
+      # so the only things this workflow trusts are GitHub's own and Gradle's.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Upload if the release is already there, create it if it is not. Both
+          # happen: a tag pushed from a terminal arrives with no release attached,
+          # while "Draft a new release" in the web interface makes the tag and the
+          # release together and then triggers this — and a bare "create" would
+          # fail on the second of those with everything built and nowhere to put it.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists; uploading to it"
+            gh release upload "$TAG" build/distributions/*.zip --clobber
+          else
+            gh release create "$TAG" build/distributions/*.zip \
+              --title "Duke plugin ${{ steps.zip.outputs.version }}" \
+              --notes-file notes.md \
+              --target "$GITHUB_SHA"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # The JetBrains Marketplace. Only for a tag, and only when the keys are there.
+  #
+  # Four secrets, none of which are in this repository:
+  #
+  #   PUBLISH_TOKEN          from plugins.jetbrains.com, under Your Profile
+  #   CERTIFICATE_CHAIN      the plugin signing chain, as PEM
+  #   PRIVATE_KEY            its private key, as PEM
+  #   PRIVATE_KEY_PASSWORD   the key's passphrase
+  #
+  # See https://plugins.jetbrains.com/docs/intellij/plugin-signing.html
+  #
+  # A 0.x goes to the beta channel — build.gradle.kts decides that, not this file.
+  # ---------------------------------------------------------------------------
+  marketplace:
+    name: Publish to the Marketplace
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are the keys here?
+        id: keys
+        env:
+          TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAIN" ]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            {
+              echo '### The Marketplace was skipped'
+              echo
+              echo 'This repository has no publishing keys set, so the tag produced a'
+              echo 'GitHub Release and nothing was sent to JetBrains. Set'
+              echo '`PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and'
+              echo '`PRIVATE_KEY_PASSWORD` under Settings -> Secrets and variables'
+              echo '-> Actions, then re-run this job.'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Java 21
+        if: steps.keys.outputs.ready == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.keys.outputs.ready == 'true'
+
+      - name: Publish
+        if: steps.keys.outputs.ready == 'true'
+        run: ./gradlew publishPlugin --no-daemon --stacktrace
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
