@@ -61,15 +61,22 @@ object DukeLinks {
         return everyNamedBlock(context)[name].orEmpty()
     }
 
-    /** Every block at the top of the project's data files that gives itself a name, whatever its record. */
+    /** Every block in the project or a library it depends on that gives itself a name, whatever its record. */
     fun namedBlocks(context: PsiElement): List<Pair<String, DukeBlock>> = everyNamedBlock(context).values.flatMap { it.toList() }
 
-    /** Every block at the top of the project's files, named or not — the one `Sun` a game lights its maps by is not. */
+    /**
+     * Every block at the top of a data file, named or not — the one `Sun` a game lights its maps by is not.
+     *
+     * <p>Libraries included, not just the project: the kit's effects are `.duke` files that ship inside
+     * `uz.duke-engine:kit`, so a game that takes the engine from a repository rather than from a checkout
+     * beside it has them in a jar. Searching the project alone finds nothing there, and every
+     * `Effect = EmberEyes` in the game reads as a link to a block that does not exist.
+     */
     fun everyBlock(context: PsiElement): List<DukeBlock> {
         val project = context.project
         return CachedValuesManager.getManager(project).getCachedValue(project) {
             val psi = PsiManager.getInstance(project)
-            val blocks = FileTypeIndex.getFiles(DukeFileType, GlobalSearchScope.projectScope(project))
+            val blocks = FileTypeIndex.getFiles(DukeFileType, GlobalSearchScope.allScope(project))
                 .mapNotNull { psi.findFile(it) as? DukeFile }
                 .flatMap { it.blocks }
             CachedValueProvider.Result.create(blocks, PsiModificationTracker.getInstance(project))
@@ -80,7 +87,8 @@ object DukeLinks {
         val project = context.project
         return CachedValuesManager.getManager(project).getCachedValue(project) {
             val psi = PsiManager.getInstance(project)
-            val blocks = FileTypeIndex.getFiles(DukeFileType, GlobalSearchScope.projectScope(project))
+            // Libraries too, for the reason `everyBlock` gives: the kit's effects live in a jar.
+            val blocks = FileTypeIndex.getFiles(DukeFileType, GlobalSearchScope.allScope(project))
                 .mapNotNull { psi.findFile(it) as? DukeFile }
                 .flatMap { it.blocks }
                 .mapNotNull { block ->

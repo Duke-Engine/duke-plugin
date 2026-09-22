@@ -49,6 +49,12 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
+    <!-- The IDE's own browser, which the model and HUD previews are drawn in. Declared because JCEF is a
+         plugin of its own now (`com.intellij.modules.jcef`, whose public module `intellij.platform.ui.jcef`
+         holds `JBCefApp`) rather than part of the platform. Without it the class is not on this plugin's
+         classloader at all, so `JBCefApp.isSupported()` — the guard written to answer "is there a browser" —
+         throws NoClassDefFoundError before it can be asked, and the preview dies with it. -->
+    <depends>com.intellij.modules.jcef</depends>
 
     <resource-bundle>messages.DukeBundle</resource-bundle>
 

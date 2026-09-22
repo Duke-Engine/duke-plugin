@@ -4,6 +4,23 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-09-22
+
+### Fixed
+
+- The model and HUD previews opened on nothing and logged `NoClassDefFoundError: com/intellij/ui/jcef/JBCefApp`
+  on 2026.1 and newer, where JCEF is a plugin of its own rather than part of the platform. The plugin never said
+  it needed one, so `JBCefApp.isSupported()` — the check written to answer "is there a browser" — threw before it
+  could be asked.
+- A link to a block that ships inside a library read as a link to nothing. `Effect = EmberEyes`, and every other
+  reference to the kit, was marked unknown for any game that takes the engine from a repository rather than from a
+  checkout beside it: the kit's effects are `.duke` files inside `uz.duke-engine:kit`, and only the project was
+  searched. Libraries are searched too now.
+
+### Changed
+
+- A new plugin icon.
+
 ## 0.2.0 - 2026-09-20
 
 ### Added
