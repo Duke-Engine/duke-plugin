@@ -1,0 +1,66 @@
+; A skeleton that casts. The richest unit the fixture has: a portrait, skills, an effect out
+; of the kit, its own clips over the set's, and something in its hand.
+
+Monster
+  Name = SkeletonMage
+  DisplayName = Skeleton Mage
+  KindOf = [INFANTRY, SELECTABLE, CAN_ATTACK]
+
+  SenseRadius = 140
+  Geometry = Cylinder
+    Radius = 3
+    Height = 12
+  End
+  Armor = [ARMOR_PIERCING = 1.5, FLAME = 0.5]
+
+  Modules = [
+    ActiveBody
+      MaxHealth = 70
+    End,
+    MoveUpdate
+      Speed = 14
+    End,
+    Brain
+      GiveUpAfter = 8
+      Leash = 40
+    End
+  ]
+
+  Tempo = 3
+
+  Model = models/monsters/skeleton_mage.glb
+  Texture = models/monsters/skeleton_mage.png
+  Tint = 0xFF9A6A
+  Held = [
+    Held
+      Model = models/monsters/staff.gltf
+      Bone = handslot.r
+    End
+  ]
+
+  Animations = Humanoid
+  ; Its own, where it does not move like everything else; the set's for the rest.
+  Idle = Spellcast_Long
+  Attack = Spellcast_Shoot
+
+  Portrait = PortraitArt
+    Texture = ui/portraits/skeleton_mage.png
+    Yaw = 12
+    Zoom = 1.2
+  End
+  Skills = [
+    Skill
+      Key = Q
+      Name = Bolt
+      Effect = ArcaneBolt
+      ManaCost = 8
+    End,
+    Skill
+      Key = W
+      Name = Blink
+      Effect = Blink
+      ManaCost = 20
+      Cooldown = 6
+    End
+  ]
+End

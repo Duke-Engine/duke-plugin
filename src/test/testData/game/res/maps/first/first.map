@@ -1,0 +1,41 @@
+; A floor drawn once, read as `.map` rather than `.duke` — a folder of its own under maps/,
+; found rather than listed. Small on purpose: every cell of it can be counted by eye, which
+; is what makes it worth asserting against.
+;
+; '#' is stone, a digit the storey a cell stands on. Eight across, six down.
+
+StaticMap
+  Name = first
+  DisplayName = The First Descent
+  Seed = 20260922
+  Entrance = [1, 4]
+  Cells = [
+    "########",
+    "#000000#",
+    "#000000#",
+    "#0011110",
+    "#000000#",
+    "########",
+  ]
+  ; The corners between the cells, a whole number each: one more across and one more down
+  ; than the grid, so 8 by 6 cells are 9 by 7 corners.
+  Relief = [
+    "0 0 0 0 0 0 0 0 0",
+    "0 0 0 1 1 1 0 0 0",
+    "0 0 0 1 1 1 0 0 0",
+    "0 0 0 1 1 1 0 0 0",
+    "0 0 0 0 0 0 0 0 0",
+    "0 0 0 0 0 0 0 0 0",
+    "0 0 0 0 0 0 0 0 0",
+  ]
+  Rooms = [
+    "1 1 6 4",
+  ]
+  Monsters = [
+    "Skeleton 2 2",
+    "SkeletonMage 5 3",
+  ]
+  Props = [
+    "Skeleton 4 1",
+  ]
+End

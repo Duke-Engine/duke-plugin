@@ -37,7 +37,7 @@ class DukeCompletionContributor : CompletionContributor() {
             when (val holder = block.parent) {
                 is DukeField -> choices(holder, result, closing = false)
                 is DukeList -> (holder.parent as? DukeField)?.let { choices(it, result, closing = true) }
-                is DukeBlock -> DukeRecords.recordOf(holder)?.let { keysAndMaps(it, holder, result) } ?: entryKeys(holder, result, withEquals = true)
+                is DukeBlock -> DukeRecords.recordOf(holder)?.let { keys(it, holder, result, withEquals = true) }
                 else -> topLevelWords(parameters.originalFile).forEach {
                     result.addElement(LookupElementBuilder.create(it).withInsertHandler(::closeBlock))
                 }
@@ -45,7 +45,7 @@ class DukeCompletionContributor : CompletionContributor() {
         })
         extend(CompletionType.BASIC, psiElement().withParent(DukeKey::class.java), provider { parameters, result ->
             val block = (parameters.position.parent as DukeKey).field.block ?: return@provider
-            DukeRecords.recordOf(block)?.let { keys(it, block, result, withEquals = false) } ?: entryKeys(block, result, withEquals = false)
+            DukeRecords.recordOf(block)?.let { keys(it, block, result, withEquals = false) }
         })
         extend(CompletionType.BASIC, psiElement().withParent(DukeValue::class.java), provider { parameters, result ->
             val value = parameters.position.parent as DukeValue
@@ -56,6 +56,7 @@ class DukeCompletionContributor : CompletionContributor() {
             value.field?.let { choices(it, result, closing = value.isInList) }
             assets(value, result)
             linksAndClips(value, result)
+            entryKeys(value, result)
         })
     }
 
@@ -72,31 +73,27 @@ class DukeCompletionContributor : CompletionContributor() {
         for (clip in DukeLinks.clipsFor(block)) result.addElement(LookupElementBuilder.create(clip).withTypeText("clip"))
     }
 
-    /** In a map whose keys link — `BossGuards` of a `Descent` — the blocks it may name and has not yet. */
-    private fun entryKeys(block: DukeBlock, result: CompletionResultSet, withEquals: Boolean) {
-        val entries = DukeRecords.shapeOf(block) as? DukeShape.Entries ?: return
-        val record = DukeLinks.linkOf(entries.component) ?: return
-        val written = block.fields.map { it.key }
-        for (name in DukeLinks.blocksOf(record, block).keys.sorted()) {
-            if (name in written) continue
-            var lookup = LookupElementBuilder.create(name).withTypeText(record.name)
-            if (withEquals) lookup = lookup.withInsertHandler { context, _ ->
+    /**
+     * An entry of the map being written, `Armor = [FLAME = 0.5]`: the constants its key type has, or — where
+     * the keys link, `BossGuards` of a `Descent` — the blocks it may name, each with the ` = ` that follows.
+     */
+    private fun entryKeys(value: DukeValue, result: CompletionResultSet) {
+        val field = value.field ?: return
+        val block = field.block ?: return
+        val record = DukeRecords.recordOf(block) ?: return
+        val component = DukeRecords.component(record, field.key)?.takeIf { DukeRecords.isMap(it.type) } ?: return
+        val written = field.values.filter { it != value }.mapNotNull { DukeRecords.entryOf(it.unquoted)?.first }
+        val link = DukeLinks.linkOf(component)
+        val names = link?.let { DukeLinks.blocksOf(it, value).keys.sorted() }
+            ?: DukeRecords.constantsOf(DukeRecords.typeArgument(component.type, 0))?.map { it.name }
+            ?: return
+        for (name in names) {
+            if (written.any { it.equals(name, ignoreCase = true) }) continue
+            result.addElement(LookupElementBuilder.create(name).withTypeText(link?.name ?: "key").withInsertHandler { context, _ ->
                 val at = context.tailOffset
                 context.document.insertString(at, " = ")
                 context.editor.caretModel.moveToOffset(at + 3)
-            }
-            result.addElement(lookup)
-        }
-    }
-
-    /** The keys the record has not been given, and its maps not yet written. */
-    private fun keysAndMaps(record: PsiClass, block: DukeBlock, result: CompletionResultSet) {
-        keys(record, block, result, withEquals = true)
-        val written = block.blocks.map { it.wordText.lowercase() }
-        for ((word, component) in DukeRecords.mapWords(record)) {
-            if (word.lowercase() in written) continue
-            result.addElement(LookupElementBuilder.create(component, word).withIcon(component.getIcon(0))
-                .withTypeText(component.type.presentableText).withInsertHandler(::closeBlock))
+            })
         }
     }
 
@@ -104,7 +101,7 @@ class DukeCompletionContributor : CompletionContributor() {
     private fun keys(record: PsiClass, block: DukeBlock, result: CompletionResultSet, withEquals: Boolean) {
         val written = block.fields.map { it.key.lowercase() } + block.blocks.map { it.wordText.lowercase() }
         for (component in record.recordComponents) {
-            if (!DukeRecords.takesValue(component) || component.name.lowercase() in written) continue
+            if (component.name.lowercase() in written) continue
             var lookup = LookupElementBuilder.create(component, DukeRecords.capitalized(component.name))
                 .withIcon(component.getIcon(0)).withTypeText(component.type.presentableText)
             if (withEquals) lookup = lookup.withInsertHandler { context, _ ->

@@ -1,0 +1,26 @@
+; The plugin's own game: small on purpose, and one of every kind of line the format has.
+;
+; It is here so the checks have real records and real data to run over without a second
+; checkout. When the engine grows a syntax, write it here — a file that raises no problem
+; is the plugin reading the new form as the engine does, and one that raises the problem
+; it should is the plugin refusing the old one.
+
+Game
+  ; The map this build opens on, by its Name.
+  StartMap = first
+
+  ; Every data file, in the order it is read: the world before what stands in it.
+  Files = [
+    data/world/world.duke,
+    data/world/hud.duke,
+    data/world/themes/forest.duke,
+
+    ; What everything on two legs moves by, linked from each unit.
+    data/animations/humanoid.duke,
+
+    data/units/skeleton.duke,
+    data/units/skeleton_mage.duke,
+
+    data/sounds/sfx.duke,
+  ]
+End

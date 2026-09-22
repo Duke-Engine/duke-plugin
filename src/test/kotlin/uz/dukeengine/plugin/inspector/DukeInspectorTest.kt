@@ -151,7 +151,7 @@ class DukeInspectorTest : LightJavaCodeInsightFixtureTestCase() {
         edit { document, block -> DukeEdits.setValue(document, block.field("Modules")!!.blocks[1], "MaxHealth", listOf("MaxHealth"), "60") }
         edit { document, block -> DukeEdits.moveBlock(document, block.field("Modules")!!.blocks[1], -1) }
         myFixture.checkResult(
-            "Monster\n  Name = Brute\n  Modules = [\n    Growing\n      MaxHealth = 60\n    End\n    MoveUpdate\n    End\n  ]\n  Moves = Humanoid\nEnd\n",
+            "Monster\n  Name = Brute\n  Modules = [\n    Growing\n      MaxHealth = 60\n    End,\n    MoveUpdate\n    End\n  ]\n  Moves = Humanoid\nEnd\n",
         )
 
         edit { document, block -> DukeEdits.removeBlock(document, block.field("Modules")!!.blocks[0]) }
@@ -169,12 +169,12 @@ class DukeInspectorTest : LightJavaCodeInsightFixtureTestCase() {
         edit { document, block -> DukeEdits.setValue(document, block.field("Geometry")!!.nested!!, "Height", listOf("Radius", "Height"), "12") }
         myFixture.checkResult(
             "Monster\n  Name = Brute\n  Keep = [20, 60]\n  Geometry = Cylinder\n    Radius = 4\n    Height = 12\n  End\n" +
-                "  Armor\n    FIRE = 0.5\n    ICE = 2\n  End\nEnd\n",
+                "  Armor = [FIRE = 0.5, ICE = 2]\nEnd\n",
         )
 
         edit { document, block -> DukeEdits.setWord(document, block.field("Geometry")!!.nested!!, "Sphere", setOf("Radius")) }
-        edit { document, block -> DukeEdits.removeEntry(document, block, "Armor", "FIRE") }
-        edit { document, block -> DukeEdits.removeEntry(document, block, "Armor", "ICE") }
+        edit { document, block -> DukeEdits.removeEntry(document, block, "Armor", ORDER, "FIRE") }
+        edit { document, block -> DukeEdits.removeEntry(document, block, "Armor", ORDER, "ICE") }
         myFixture.checkResult("Monster\n  Name = Brute\n  Keep = [20, 60]\n  Geometry = Sphere\n    Radius = 4\n  End\nEnd\n")
     }
 

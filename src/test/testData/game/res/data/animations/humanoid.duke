@@ -1,0 +1,16 @@
+; What everything on two legs moves by. A unit names this set and plays the clips it does
+; not name of its own; the clips themselves are read out of the files below, so what a
+; `@Clip` field may be is the files' business and nobody writes a list of them.
+
+AnimationSet
+  Name = Humanoid
+  Libraries = [
+    animations/characters/general.gltf,
+    animations/characters/magic.gltf,
+  ]
+  Idle = Idle_A
+  Walk = Walking_A
+  Attack = Melee_Attack
+  Hurt = Hit_A
+  Death = Death_A
+End

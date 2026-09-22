@@ -74,7 +74,7 @@ internal object NewFromTemplate {
 
     /** The component that holds a block's cells, for a word whose record has one: what makes it a map. */
     private fun gridOf(project: Project, word: String): com.intellij.psi.PsiRecordComponent? {
-        val shape = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape.Record
+        val shape = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape
         return shape?.record?.recordComponents?.firstOrNull { it.hasAnnotation("uz.dukeengine.core.data.Grid") }
     }
 
@@ -122,7 +122,7 @@ internal object NewFromTemplate {
     }
 
     private fun blank(project: Project, word: String, name: String): String {
-        val record = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape.Record
+        val record = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape
         val titled = record?.record?.let { DukeRecords.component(it, "displayName") } != null
         return buildString {
             append(word).append('\n')
@@ -149,7 +149,7 @@ internal object NewFromTemplate {
                          grid: com.intellij.psi.PsiRecordComponent): String {
         val solid = DukeRecords.constantString(grid.getAnnotation("uz.dukeengine.core.data.Grid")?.findAttributeValue("solid"))
             ?.firstOrNull() ?: '#'
-        val record = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape.Record
+        val record = files(project).firstOrNull()?.let { DukeRecords.topLevel(it, word) } as? uz.dukeengine.plugin.duke.DukeShape
         val titled = record?.record?.let { DukeRecords.component(it, "displayName") } != null
         val rows = (0 until STARTER_ROWS).map { row ->
             if (row == 0 || row == STARTER_ROWS - 1) solid.toString().repeat(STARTER_COLUMNS)

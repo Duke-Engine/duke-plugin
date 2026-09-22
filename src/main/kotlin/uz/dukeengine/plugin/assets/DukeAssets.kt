@@ -1,5 +1,6 @@
 package uz.dukeengine.plugin.assets
 
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtilCore
@@ -41,12 +42,18 @@ enum class AssetKind(private val label: String, val extensions: List<String>) {
  * a name, so a game may keep its files in whatever structure it likes.
  */
 object DukeAssets {
-    /** Null outside a resource root: nothing to check against, so nothing is checked. */
-    fun rootOf(element: PsiElement): VirtualFile? {
-        val file = element.containingFile?.originalFile?.virtualFile ?: return null
+    /**
+     * Null outside a resource root: nothing to check against, so nothing is checked.
+     *
+     * Under a read action of its own, because the project index needs one and the Inspector asks this
+     * from a listener of its own — a group header clicked — which reaches the EDT without one. Every
+     * other caller is already inside one, where this costs nothing.
+     */
+    fun rootOf(element: PsiElement): VirtualFile? = ReadAction.compute<VirtualFile?, RuntimeException> {
+        val file = element.containingFile?.originalFile?.virtualFile ?: return@compute null
         val index = ProjectFileIndex.getInstance(element.project)
-        if (!index.isUnderSourceRootOfType(file, JavaModuleSourceRootTypes.RESOURCES)) return null
-        return index.getSourceRootForFile(file)
+        if (!index.isUnderSourceRootOfType(file, JavaModuleSourceRootTypes.RESOURCES)) return@compute null
+        index.getSourceRootForFile(file)
     }
 
     /**

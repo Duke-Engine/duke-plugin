@@ -13,7 +13,8 @@
             <li>Highlighting for block words, <code>End</code>, keys, values, numbers, strings, <code>[a, b]</code> lists
                 and <code>;</code> comments; brace matching and line comments</li>
             <li>Every line of a block names a field of its class: <code>Geometry = Cylinder</code> with its fields under it,
-                <code>Modules = [</code> a block for each <code>]</code>, <code>Armor</code> for a map</li>
+                <code>Modules = [</code> a block for each, a comma between them, <code>]</code>, and a map its entries,
+                <code>Armor = [FLAME = 0.5]</code></li>
             <li>Ctrl+Click from a key to the record component it fills, and from a class — a block's word or the class after
                 <code>=</code> — to the Java class it is read as: <code>Monster</code> to its record, <code>MoveUpdate</code> to
                 the module class, <code>Cylinder</code> to the shape</li>
@@ -86,7 +87,7 @@
         <typedHandler implementation="uz.dukeengine.plugin.duke.DukeTypedHandler"/>
 
         <fileEditorProvider implementation="uz.dukeengine.plugin.map.DukeMapEditorProvider"/>
-        <toolWindow id="Duke Inspector" anchor="right" icon="AllIcons.Toolwindows.ToolWindowStructure"
+        <toolWindow id="Duke Inspector" anchor="right" icon="/icons/dukeInspector.svg"
                     factoryClass="uz.dukeengine.plugin.inspector.DukeInspectorFactory"/>
     </extensions>
 

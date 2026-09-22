@@ -305,18 +305,21 @@ object InspectorModels {
             return row(id, key, depth, field, ValueEditor.Values(options), place, component.type, help, default, problem, items)
         }
 
-        /** A map, `Armor … End`: a row of its entries, its keys chosen from an enum's constants or the names it links. */
+        /**
+         * A map, `Armor = [FLAME = 0.5]`: a row of its entries, read out of the list's items as
+         * `Binder.entries` reads them, its keys chosen from an enum's constants or the names it links.
+         */
         private fun entries(
             owner: DukeBlock, component: PsiRecordComponent, id: String, key: String, depth: Int, place: Place, help: Help, default: String,
         ): FieldRow {
-            val map = owner.blocks.firstOrNull { it.wordText.equals(key, ignoreCase = true) }
+            val field = owner.field(key)
             val keyType = DukeRecords.typeArgument(component.type, 0)
             val keys = DukeRecords.constantsOf(keyType)?.map { it.name }
                 ?: DukeLinks.linkOf(component)?.let { DukeLinks.blocksOf(it, owner).keys.sorted() }
             val valueType = DukeRecords.typeArgument(component.type, 1)
-            val items = map?.fields?.map { "${it.key} = ${it.valueText ?: writtenText(it)}" }.orEmpty()
-            val line = map?.let { lineOf(it) }
-            return FieldRow(id, humanize(key), depth, map?.let { "${items.size} entries" }, items, default,
+            val items = field?.values.orEmpty().mapNotNull { DukeRecords.entryOf(it.unquoted)?.let { (k, v) -> "$k = $v" } }
+            val line = field?.let { lineOf(it) }
+            return FieldRow(id, humanize(key), depth, field?.let { "${items.size} entries" }, items, default,
                 ValueEditor.Entries(keys, valueType != null && isNumeric(valueType)), place, component.type, null, line, help)
         }
 

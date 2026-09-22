@@ -98,6 +98,13 @@ class DukeAnnotator : Annotator, DumbAware {
     private fun list(list: DukeList, holder: AnnotationHolder) {
         if (list.holdsBlocks) {
             if (!list.isClosed) holder.error(list.firstChild, "duke.block.list.open", (list.parent as? DukeField)?.key.orEmpty())
+            // A comma on the End holds one block apart from the next; the last of the list may do without.
+            val blocks = list.blocks
+            for ((index, block) in blocks.dropLast(1).withIndex()) {
+                if (!block.isClosed || block.hasComma) continue
+                val next = blocks[index + 1]
+                holder.error(next.word, "duke.block.list.comma", (list.parent as? DukeField)?.key.orEmpty(), next.wordText)
+            }
             return
         }
         if (!list.isClosed) holder.error(list.firstChild, "duke.list.open")
@@ -186,45 +193,58 @@ class DukeEngineAnnotator : Annotator {
             holder.plain(word, notOneOf(type, field.key, word.text, word))
             return
         }
-        when (shape) {
-            is DukeShape.Entries -> {
-                val first = owner.blocks.first { it.wordText.equals(block.wordText, ignoreCase = true) }
-                if (first != block) holder.error(word, "duke.block.twice", word.text, owner.wordText)
-            }
-            else -> when {
-                DukeRecords.shapeOf(owner) is DukeShape.Entries -> holder.error(word, "duke.entries.not.blocks", owner.wordText)
-                else -> DukeRecords.recordOf(owner)?.let { holder.plain(word, DukeRecords.misplaced(it, owner.wordText, word.text, word)) }
-            }
-        }
+        // Nothing stands inside a block but its own fields, so a block on its own is always misplaced:
+        // a map, which used to be written this way, is told how it is written now.
+        DukeRecords.recordOf(owner)?.let { holder.plain(word, DukeRecords.misplaced(it, owner.wordText, word.text, word)) }
     }
 
     private fun field(field: DukeField, holder: AnnotationHolder) {
         val block = field.block ?: return
-        when (val shape = DukeRecords.shapeOf(block)) {
-            is DukeShape.Record -> {
-                val component = DukeRecords.component(shape.record, field.key)
-                if (component == null) {
-                    holder.error(field.keyElement, "duke.no.field", block.wordText, field.key)
-                    return
-                }
-                value(field, component.type, holder)
-                val link = DukeLinks.linkOf(component) ?: return
-                val names = DukeLinks.blocksOf(link, field)
-                for (named in field.values) {
-                    val name = DukeLinks.linkedName(component, named.unquoted)
-                    if (name !in names) holder.error(named, "duke.no.link", link.name.orEmpty(), name)
-                }
+        val shape = DukeRecords.shapeOf(block) ?: return
+        val component = DukeRecords.component(shape.record, field.key)
+        if (component == null) {
+            holder.error(field.keyElement, "duke.no.field", block.wordText, field.key)
+            return
+        }
+        value(field, component.type, holder)
+        val link = DukeLinks.linkOf(component) ?: return
+        val names = DukeLinks.blocksOf(link, field)
+        // A map links by the key of each entry, `Brute = 2`; every other field by the value itself.
+        val map = DukeRecords.isMap(component.type)
+        for (named in field.values) {
+            val written = if (map) DukeRecords.entryOf(named.unquoted)?.first ?: continue else named.unquoted
+            val name = DukeLinks.linkedName(component, written)
+            if (name !in names) holder.error(named, "duke.no.link", link.name.orEmpty(), name)
+        }
+    }
+
+    /**
+     * A map's entries, as `Binder.entries` reads them: a list of `key = value`, the key read as the map's
+     * key type and the value as its value type, and no key written twice.
+     */
+    private fun entries(field: DukeField, type: PsiType, holder: AnnotationHolder) {
+        val list = field.list
+        if (list == null || list.holdsBlocks) {
+            holder.error(field.nested?.word ?: list ?: field.value ?: field.keyElement, "duke.is.map", field.key)
+            return
+        }
+        val keyType = DukeRecords.typeArgument(type, 0)
+        val valueType = DukeRecords.typeArgument(type, 1)
+        val written = mutableSetOf<String>()
+        for (item in list.items) {
+            val entry = DukeRecords.entryOf(item.unquoted)
+            if (entry == null) {
+                holder.error(item, "duke.entry.no.equals", field.key, item.unquoted)
+                continue
             }
-            is DukeShape.Entries -> {
-                DukeLinks.linkOf(shape.component)?.let { link ->
-                    if (field.key !in DukeLinks.blocksOf(link, field)) holder.error(field.keyElement, "duke.no.link", link.name.orEmpty(), field.key)
-                }
-                DukeRecords.typeArgument(shape.component.type, 0)?.let { type ->
-                    DukeRecords.problemOf(field.key, type, field.key)?.let { holder.plain(field.keyElement, it) }
-                }
-                DukeRecords.typeArgument(shape.component.type, 1)?.let { value(field, it, holder) }
+            val (name, value) = entry
+            if (!written.add(name.lowercase())) {
+                holder.error(item, "duke.entry.twice", name, field.key)
+                continue
             }
-            null -> {}
+            // Both halves are named by the map, not by the entry, as `Binder.entries` names them.
+            keyType?.let { DukeRecords.problemOf(name, it, field.key)?.let { problem -> holder.plain(item, problem) } }
+            valueType?.let { DukeRecords.problemOf(value, it, field.key)?.let { problem -> holder.plain(item, problem) } }
         }
     }
 
@@ -234,7 +254,7 @@ class DukeEngineAnnotator : Annotator {
         val list = field.list
         val at: PsiElement = field.nested?.word ?: list ?: field.value ?: field.keyElement
         if (DukeRecords.isMap(type)) {
-            holder.error(at, "duke.is.map", key)
+            entries(field, type, holder)
             return
         }
         if (DukeRecords.isCollection(type)) {

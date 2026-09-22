@@ -34,8 +34,8 @@ components, by name — so every line starts with a field of the class:
 | a value | `Speed = 10` |
 | a list of values | `KindOf = [INFANTRY, CAN_ATTACK]`, over several lines if it likes |
 | one record | `Geometry = Cylinder`, its fields under it, `End` — the class after `=` |
-| a list of records | `Modules = [`, a block for each (`MoveUpdate` … `End`, no commas), `]` |
-| a map | `Armor`, its entries (`FLAME = 0.5`), `End` |
+| a list of records | `Modules = [`, a block for each (`MoveUpdate` … `End,`), `]` — a comma between them, none needed after the last |
+| a map | `Armor = [FLAME = 0.5, SNIPER = 2.0]`, over several lines if it likes |
 
 `Key = Class` opens a block only when the next line is indented deeper; a record with nothing written in it is
 the word alone, `Geometry = Sphere`. The plugin reads the records the same way, from IntelliJ's Java model
@@ -194,18 +194,22 @@ Run it with `./gradlew runIde`, then open the duke-engine project in the IDE tha
 ### What the tests read
 
 The plugin knows no particular game, but testing it needs one: its checks are only worth anything run over
-real records and real data rather than over fixtures written to agree with them. So the tests read **two
-checkouts off the disk**: the engine, for its records, and a game, for its files.
+real records and real data rather than over fixtures written to agree with them.
 
-Both are **looked for** rather than hard-coded, because the plugin lives inside the engine's repository today
-and beside it once they are split:
+The records are the **engine's**, read off a checkout on the disk — the plugin mirrors `Binder`, so the engine
+is the spec. It is **looked for** rather than hard-coded, because the plugin lives beside it today and a build
+server puts them wherever it likes: `..`, `../duke-engine`, `../DukeEngine`, or wherever `DUKE_ENGINE` says.
+If it is not found the tests say so and name the places they looked. See `test/…/engine/Repos.kt`.
 
-| | Looked for in | Point it elsewhere with |
-|---|---|---|
-| the engine | `..`, `../duke-engine`, `../DukeEngine` | `DUKE_ENGINE` |
-| a game to read | `../dungeon`, `<engine>/dungeon`, `../duke-dungeon` | `DUKE_SAMPLE` |
+The game those records are written into is **the plugin's own**, under
+[`src/test/testData/game`](src/test/testData/game) — its records under `java`, everything it is made of under
+`res`: units, an animation set with the `.gltf` files its clips are read out of, a world, a theme, a HUD with
+its skins, a map, and the assets they name. Small on purpose, and one of every kind of line the format has.
 
-If neither is found the tests say so and name the places they looked. See `test/…/engine/Repos.kt`.
+**When the engine grows a syntax, write it into that game.** A file that raises no problem is the plugin
+reading the new form as the engine does; a file that raises the problem it should is the plugin refusing the
+old one — `testTheFormsOfTheCurrentEngineReadAsTheEngineReadsThem` is where that is pinned. No second game
+checkout is needed, and nothing here depends on any particular game.
 
 ### Releasing it
 

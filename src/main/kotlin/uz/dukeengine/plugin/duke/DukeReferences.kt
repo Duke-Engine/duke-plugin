@@ -45,12 +45,8 @@ class DukeWordReference(word: DukeWord) : PsiReferenceBase<DukeWord>(word, TextR
 class DukeKeyReference(key: DukeKey) : PsiReferenceBase<DukeKey>(key, TextRange(0, key.textLength), true) {
     override fun resolve(): PsiElement? {
         val block = element.field.block ?: return null
-        return when (val shape = DukeRecords.shapeOf(block)) {
-            is DukeShape.Record -> DukeRecords.component(shape.record, element.text)
-            is DukeShape.Entries -> DukeLinks.linkOf(shape.component)?.let { DukeLinks.blocksOf(it, element)[element.text] }
-                ?: constant(DukeRecords.typeArgument(shape.component.type, 0), element.text)
-            null -> null
-        }
+        val shape = DukeRecords.shapeOf(block) ?: return null
+        return DukeRecords.component(shape.record, element.text)
     }
 
     override fun isReferenceTo(target: PsiElement) =
@@ -88,8 +84,24 @@ class DukeChoiceReference(value: DukeValue, private val type: PsiClass) :
     override fun getVariants(): Array<Any> = emptyArray()
 }
 
+/**
+ * The key of one entry of a map, the part of `FLAME = 0.5` before its `=`: Ctrl+Click opens the enum
+ * constant it names, or — where the keys link, `Brute = 2` of a `BossGuards` — the block they name.
+ */
+class DukeEntryReference(item: DukeValue, range: TextRange, private val component: PsiRecordComponent) :
+    PsiReferenceBase<DukeValue>(item, range, true) {
+    override fun resolve(): PsiElement? {
+        val name = rangeInElement.substring(element.text)
+        DukeLinks.linkOf(component)?.let { return DukeLinks.blocksOf(it, element)[name] }
+        return constant(DukeRecords.typeArgument(component.type, 0), name)
+    }
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
 object DukeValueReferences {
     fun of(value: DukeValue): Array<PsiReference> {
+        entryKey(value)?.let { return arrayOf(it) }
         if (AssetKind.of(value.unquoted) != null) return arrayOf(DukeFileReference(value))
         DukeLinks.componentOf(value)?.let { component ->
             DukeLinks.linkOf(component)?.let { return arrayOf(DukeLinkReference(value, it, DukeLinks.linkedName(component, value.unquoted))) }
@@ -100,15 +112,27 @@ object DukeValueReferences {
         return arrayOf(DukeChoiceReference(value, choice))
     }
 
+    /** [value] as one entry of a map, pointed at by its key; null for anything else. */
+    private fun entryKey(value: DukeValue): DukeEntryReference? {
+        if (!value.isInList) return null
+        val field = value.field ?: return null
+        val record = field.block?.let(DukeRecords::recordOf) ?: return null
+        val component = DukeRecords.component(record, field.key)?.takeIf { DukeRecords.isMap(it.type) } ?: return null
+        val written = value.text.substringBefore('=', "")
+        val start = written.indexOfFirst { !it.isWhitespace() }
+        if (start < 0) return null
+        return DukeEntryReference(value, TextRange(start, written.trimEnd().length), component)
+    }
+
     /** What [value] is read as: its component's type, an item's element type, a map's value type. */
     fun typeOf(value: DukeValue): PsiType? {
         val field = value.field ?: return null
         val block = field.block ?: return null
-        val type = when (val shape = DukeRecords.shapeOf(block)) {
-            is DukeShape.Record -> DukeRecords.component(shape.record, field.key)?.type
-            is DukeShape.Entries -> DukeRecords.typeArgument(shape.component.type, 1)
-            null -> null
-        } ?: return null
+        val shape = DukeRecords.shapeOf(block) ?: return null
+        val type = DukeRecords.component(shape.record, field.key)?.type ?: return null
+        // An item of a map is a whole entry, `FLAME = 0.5`; what points anywhere in it is its key, which
+        // [DukeEntryReference] takes on its own.
+        if (DukeRecords.isMap(type)) return null
         if (!value.isInList) return type
         DukeRecords.elementOf(type)?.let { return it }
         // A record written as its components in order: `SkillDistance = [20, 60]`.

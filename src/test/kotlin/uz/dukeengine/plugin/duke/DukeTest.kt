@@ -49,6 +49,33 @@ class DukeSyntaxTest : BasePlatformTestCase() {
         myFixture.checkHighlighting()
     }
 
+    /** `End,` closes its block as `End` does, and between two blocks of a list the comma is not optional. */
+    fun testTheCommaBetweenTheBlocksOfAList() {
+        myFixture.configureByText(
+            "brute.duke",
+            """
+            |Monster
+            |  Modules = [
+            |    Bow
+            |    End, ; a comment after it is still the End
+            |    Sword
+            |    End
+            |  ]
+            |  Skills = [
+            |    Heal
+            |    End
+            |    <error descr="'Skills' separates its blocks with a comma: write 'End,' before 'Harm', or ']' if the list is done">Harm</error>
+            |    End
+            |  ]
+            |End
+            """.trimMargin(),
+        )
+        myFixture.checkHighlighting()
+        val monster = (myFixture.file as DukeFile).blocks.single()
+        assertEquals(listOf("Bow", "Sword"), monster.field("Modules")!!.blocks.map { it.wordText })
+        assertEquals(listOf(true, false), monster.field("Modules")!!.blocks.map { it.hasComma })
+    }
+
     /** A value with the line under it indented by mistake opens a block; it is flagged at the field, where the engine says it. */
     fun testALineIndentedTooDeepIsFoundWhereItIs() {
         myFixture.configureByText(
@@ -84,7 +111,7 @@ class DukeSyntaxTest : BasePlatformTestCase() {
             |  Look = Fire
             |  Modules = [
             |    Bow
-            |    End
+            |    End,
             |    MoveUpdate
             |      Speed = 4
             |    End
@@ -182,11 +209,7 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
             |    <error descr="'Modules' is one of [MoveUpdate], not 'Wheel'">Wheel</error>
             |    End
             |  ]
-            |  Armor
-            |    <error descr="'ARMOR' is one of [FIRE, ICE], not 'ARMOR'">ARMOR</error> = 1
-            |    <error descr="'Armor' holds entries, not blocks">Plate</error>
-            |    End
-            |  End
+            |  Armor = [<error descr="'Armor' is one of [FIRE, ICE], not 'ARMOR'">ARMOR = 1</error>, <error descr="'Armor' holds entries written 'key = value'; 'Plate' has no '='">Plate</error>]
             |  <error descr="'Cylinder' is the value of its field: Geometry = Cylinder">Cylinder</error>
             |  End
             |  <error descr="'MoveUpdate' goes in its list: 'Modules = [', then MoveUpdate … End, then ']'">MoveUpdate</error>
@@ -209,7 +232,8 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
         assertEquals("uz.dukeengine.core.thing.Geometry.Cylinder", classAt("Monster\n  Geometry = Cyl<caret>inder\n    Radius = 1\n  End\nEnd\n"))
         assertEquals("uz.dukeengine.core.thing.Geometry.Sphere", classAt("Monster\n  Geometry = Sph<caret>ere\nEnd\n"))
         assertEquals("game.Skill", classAt("Monster\n  Skills = [\n    Sk<caret>ill\n    End\n  ]\nEnd\n"))
-        myFixture.configureByText("u.duke", "Monster\n  Ar<caret>mor\n  End\nEnd\n")
+        // A map is a field now, so its name is a key rather than a word; it opens its component all the same.
+        myFixture.configureByText("u.duke", "Monster\n  Ar<caret>mor = [FIRE = 1]\nEnd\n")
         assertEquals("armor", (myFixture.elementAtCaret as PsiRecordComponent).name)
         myFixture.configureByText("u.duke", "Monster\n  Geo<caret>metry = Sphere\nEnd\n")
         assertEquals("geometry", (myFixture.elementAtCaret as PsiRecordComponent).name)
@@ -222,7 +246,7 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
         assertEquals("Data", speed.containingClass?.name)
         myFixture.configureByText("u.duke", "Monster\n  Effect = HE<caret>AL\nEnd\n")
         assertEquals("HEAL", (myFixture.elementAtCaret as PsiEnumConstant).name)
-        myFixture.configureByText("u.duke", "Monster\n  Armor\n    FI<caret>RE = 1\n  End\nEnd\n")
+        myFixture.configureByText("u.duke", "Monster\n  Armor = [FI<caret>RE = 1]\nEnd\n")
         assertEquals("FIRE", (myFixture.elementAtCaret as PsiEnumConstant).name)
     }
 
@@ -297,14 +321,12 @@ class DukeRecordsTest : LightJavaCodeInsightFixtureTestCase() {
             |    Skill
             |      Key = Q
             |      Effect = heal
-            |    End
+            |    End,
             |    Skill
             |      Key = W
             |    End
             |  ]
-            |  Armor
-            |    FIRE = 0.5
-            |  End
+            |  Armor = [FIRE = 0.5]
             |End
             |Object
             |  Name = Tower

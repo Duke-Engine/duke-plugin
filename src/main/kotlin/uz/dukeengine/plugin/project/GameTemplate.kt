@@ -324,15 +324,15 @@ object GameTemplate {
           Modules = [
             ActiveBody
               MaxHealth = 120
-            End
+            End,
             MoveUpdate
               Speed = 26
-            End
+            End,
             WeaponUpdate
               Damage = 12
               AttackRange = 40
               ReloadFrames = 30
-            End
+            End,
             ; Walks into range of whatever it is sent at, and stops there to shoot.
             ; Take this block out and it stands still and waits instead.
             PursueUpdate
@@ -359,7 +359,7 @@ object GameTemplate {
           Modules = [
             ActiveBody
               MaxHealth = 300
-            End
+            End,
             WeaponUpdate
               Damage = 8
               AttackRange = 90

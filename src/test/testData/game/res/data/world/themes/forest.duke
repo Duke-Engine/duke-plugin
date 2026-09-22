@@ -1,0 +1,19 @@
+; What a floor is dressed in. The plugin finds this block by its shape — `TileSize` and
+; `Tones` — rather than by its name, so the 3D view lays a floor for any game that has one.
+
+Theme
+  Name = Forest
+  TileSize = 4
+  Tones = [
+    Tone
+      Name = Rocky
+      Floor = models/tiles/forest/floor_rocky.gltf
+      Wall = models/tiles/forest/tree_round.gltf
+    End,
+    Tone
+      Name = Mossy
+      Floor = models/tiles/forest/floor_mossy.gltf
+      Wall = models/tiles/forest/tree_tall.gltf
+    End
+  ]
+End

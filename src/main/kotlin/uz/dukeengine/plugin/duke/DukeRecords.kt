@@ -33,23 +33,13 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
 import com.intellij.util.containers.ConcurrentFactoryMap
 
-/** What a block is, as `uz.dukeengine.core.data.Binder` reads it. */
-sealed interface DukeShape {
-    /** What Ctrl+Click on the block's word opens. */
-    val target: PsiElement
-
-    /**
-     * A record — `Monster`, a `Cylinder`, `MoveUpdate`'s `Data` — opened at a module's class, else at
-     * itself. [component] is what holds it in the block it is written in; null at the top of a file.
-     */
-    class Record(val record: PsiClass, override val target: PsiElement, val component: PsiRecordComponent? = null) : DukeShape
-
-    /** A `Map` component written as a block, `Armor`: each line one entry. */
-    class Entries(val component: PsiRecordComponent) : DukeShape {
-        override val target: PsiElement
-            get() = component
-    }
-}
+/**
+ * What a block is, as `uz.dukeengine.core.data.Binder` reads it: always a record — `Monster`, a
+ * `Cylinder`, `MoveUpdate`'s `Data` — since nothing else may be written as a block. [target] is what
+ * Ctrl+Click on its word opens, a module's class where it has one; [component] is what holds it in
+ * the block it is written in, null at the top of a file.
+ */
+class DukeShape(val record: PsiClass, val target: PsiElement, val component: PsiRecordComponent? = null)
 
 /**
  * The game's records, read as `Binder` reads them, from the Java model rather than by loading
@@ -63,7 +53,8 @@ sealed interface DukeShape {
  *   (`Cylinder` for a `Geometry`), or a word of an open type — each record implementing it, by the
  *   name of the class it is written in, `MoveUpdate` for `MoveUpdate.Data`, as `ModuleFactory.nameOf`
  *   names a module.
- * - A block written on its own inside a record is one of its maps, named by its component.
+ * - A `Map` is a field like any other, written as a list of its entries: `Armor = [FLAME = 0.5]`.
+ *   Nothing stands inside a block but its own fields, so a block written on its own is misplaced.
  *
  * Nothing here names a game.
  */
@@ -82,21 +73,18 @@ object DukeRecords {
     }
 
     /** The record [block] is, when it is one rather than a map. */
-    fun recordOf(block: DukeBlock): PsiClass? = (shapeOf(block) as? DukeShape.Record)?.record
+    fun recordOf(block: DukeBlock): PsiClass? = shapeOf(block)?.record
 
     private fun compute(block: DukeBlock): DukeShape? {
         val owner = block.owner ?: return topLevel(block, block.wordText)
         val record = recordOf(owner) ?: return null
-        val field = block.owningField
-        if (field == null) {
-            // A block on its own inside a record is one of its maps, named by its field.
-            val component = component(record, block.wordText) ?: return null
-            return if (isMap(component.type)) DukeShape.Entries(component) else null
-        }
+        // Nothing stands inside a block but its own fields: since 0.3.0 a map is a field like any other,
+        // `Armor = [FLAME = 0.5]`, so a block written on its own is nothing the record has. [misplaced].
+        val field = block.owningField ?: return null
         val component = component(record, field.key) ?: return null
         val type = blockClass(component.type) ?: return null
         val found = accepting(type, block.wordText, block) ?: return null
-        return DukeShape.Record(found, targetOf(found, type), component)
+        return DukeShape(found, targetOf(found, type), component)
     }
 
     /** What Ctrl+Click on a record's word opens: a module's class for a word of an open type, else the record. */
@@ -110,7 +98,7 @@ object DukeRecords {
      * one over a nested one.
      */
     fun topLevel(context: PsiElement, word: String): DukeShape? {
-        registered(context)[word.lowercase()]?.firstOrNull()?.let { return DukeShape.Record(it, it) }
+        registered(context)[word.lowercase()]?.firstOrNull()?.let { return DukeShape(it, it) }
         val names = PsiShortNamesCache.getInstance(context.project)
         val own = ModuleUtilCore.findModuleForPsiElement(context)?.let(GlobalSearchScope::moduleScope)
         val keys = (context as? DukeBlock)?.fields?.map { it.key }.orEmpty()
@@ -122,7 +110,7 @@ object DukeRecords {
                 { candidate -> keys.count { component(candidate, it) == null } },
                 { if (it.containingClass == null) 0 else 1 },
             )) ?: return null
-        return DukeShape.Record(record, record)
+        return DukeShape(record, record)
     }
 
     /** Every word a template loader is told, a game's registration before the loader's own, which it replaces. */
@@ -149,6 +137,7 @@ object DukeRecords {
     fun misplaced(record: PsiClass, holder: String, word: String, context: PsiElement): String {
         component(record, word)?.let { component ->
             val type = component.type
+            if (isMap(type)) return "'$word' is a map: write it $word = [key = value, key = value]"
             if (isCollection(type)) {
                 return if (isChoosable(blockClass(type))) "'$word' is a list of blocks: '$word = [', a block for each, then ']'"
                 else "'$word' is a list: write it $word = [a, b]"
@@ -200,16 +189,16 @@ object DukeRecords {
         else -> emptyList()
     }
 
-    /** The maps of [record], by the words their blocks are written with: the only blocks written on their own. */
-    fun mapWords(record: PsiClass): Map<String, PsiRecordComponent> =
-        record.recordComponents.filter { isMap(it.type) }.associateBy { capitalized(it.name) }
-
     /** The component [key] fills, any case. */
     fun component(record: PsiClass, key: String): PsiRecordComponent? =
         record.recordComponents.firstOrNull { it.name.equals(key, ignoreCase = true) }
 
-    /** Whether [component] is written `Key = …`: every one but a map, whose entries are a block of their own. */
-    fun takesValue(component: PsiRecordComponent): Boolean = !isMap(component.type)
+    /** One entry of a map, `FLAME = 0.5`, split at its first `=` as `Binder.entries` splits it; null with no `=`. */
+    fun entryOf(text: String): Pair<String, String>? {
+        val sign = text.indexOf('=')
+        if (sign < 0) return null
+        return text.substring(0, sign).trim() to text.substring(sign + 1).trim()
+    }
 
     /** The class a block written for [type] is: what a list holds, else the type's own. */
     fun blockClass(type: PsiType): PsiClass? = classOf(if (isCollection(type)) elementOf(type) else type)

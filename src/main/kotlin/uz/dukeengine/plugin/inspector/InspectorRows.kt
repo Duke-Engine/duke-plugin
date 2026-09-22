@@ -112,7 +112,10 @@ internal object Rows {
 
     private fun field(row: FieldRow, host: RowHost): JComponent {
         val panel = RowPanel(row, host, row.isWritten)
-        panel.add(label(row.label, row.isWritten, row.help.key), BorderLayout.WEST)
+        // A map's entries take the whole width: its name goes above them rather than in the label
+        // column, which leaves a long key — SUBDUAL_BUILDING — nothing to be written beside.
+        val above = row.editor is ValueEditor.Entries
+        panel.add(label(row.label, row.isWritten, row.help.key), if (above) BorderLayout.NORTH else BorderLayout.WEST)
         val centre = JPanel(VerticalLayout(JBUI.scale(2))).apply { isOpaque = false }
         centre.add(editor(row, host))
         row.problem?.let { centre.add(JBLabel(it, AllIcons.General.Error, JBLabel.LEFT).apply { foreground = Palette.error; font = JBFont.small() }) }
@@ -125,8 +128,7 @@ internal object Rows {
 
     private fun reset(document: Document, row: FieldRow) {
         val owner = row.place.owner.element ?: return
-        val target = if (row.editor is ValueEditor.Entries) DukeEdits.mapOf(owner, row.place.key) else owner.field(row.place.key)
-        target?.let { DukeEdits.removeLines(document, it) }
+        owner.field(row.place.key)?.let { DukeEdits.removeLines(document, it) }
     }
 
     private fun label(text: String, written: Boolean, key: String) = JBLabel(text).apply {
@@ -391,7 +393,10 @@ internal object Rows {
             row.place.owner.element?.let { change(document, it) }
         }
         for ((key, value) in pairs) {
-            val line = flow()
+            // The key takes what it needs and the box the rest: a flow would wrap the box onto a second
+            // line and the row, sized for one, would cut it in half.
+            val line = JPanel(BorderLayout(JBUI.scale(6), 0)).apply { isOpaque = false }
+            val name = flow()
             if (entries.keys != null) {
                 lateinit var pick: ActionLink
                 pick = ActionLink(key) {
@@ -399,11 +404,12 @@ internal object Rows {
                         edit("Rename") { document, owner -> DukeEdits.renameEntry(document, owner, row.place.key, key, chosen) }
                     }
                 }
-                line.add(pick)
+                name.add(pick)
             } else {
-                line.add(JBLabel(key))
+                name.add(JBLabel(key))
             }
-            line.add(JBLabel("=").apply { foreground = Palette.muted })
+            name.add(JBLabel("=").apply { foreground = Palette.muted })
+            line.add(name, BorderLayout.WEST)
             val box = JBTextField(value, 5)
             box.putClientProperty(COMMITTED, value)
             val commit = commit@{
@@ -421,10 +427,10 @@ internal object Rows {
                 override fun focusGained(e: FocusEvent) = host.select(row)
                 override fun focusLost(e: FocusEvent) = commit()
             })
-            line.add(box)
+            line.add(box, BorderLayout.CENTER)
             line.add(button("Remove $key", AllIcons.Actions.Close) {
-                edit("Remove") { document, owner -> DukeEdits.removeEntry(document, owner, row.place.key, key) }
-            })
+                edit("Remove") { document, owner -> DukeEdits.removeEntry(document, owner, row.place.key, row.place.order, key) }
+            }, BorderLayout.EAST)
             panel.add(line)
         }
         if (pairs.isEmpty()) panel.add(JBLabel("none").apply { foreground = Palette.muted })

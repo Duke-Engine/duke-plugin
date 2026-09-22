@@ -25,6 +25,13 @@ class DukeBlock(node: ASTNode) : ASTWrapperPsiElement(node) {
     val isClosed: Boolean
         get() = node.findChildByType(T.END) != null
 
+    /**
+     * Whether its `End` carries the comma that holds one block of a list apart from the next. The only
+     * comma a block owns: the ones in `Key = [a, b]` belong to the list of its field.
+     */
+    val hasComma: Boolean
+        get() = node.findChildByType(T.COMMA) != null
+
     val fields: List<DukeField>
         get() = PsiTreeUtil.getChildrenOfTypeAsList(this, DukeField::class.java)
 

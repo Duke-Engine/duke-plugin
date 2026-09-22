@@ -1,0 +1,16 @@
+; Sounds, named for the moment and the creature: `died.Skeleton` is what the client raises
+; when a skeleton dies, and the Inspector's "Add Sound…" writes one of these.
+
+Cue
+  Name = died.Skeleton
+  Files = [
+    sounds/skeleton_died_01.ogg,
+    sounds/skeleton_died_02.ogg,
+  ]
+  Gain = 0.8
+End
+
+Cue
+  Name = hurt.Skeleton
+  Files = [sounds/skeleton_hurt_01.ogg]
+End

@@ -10,6 +10,7 @@ import com.intellij.psi.PsiFile
 import uz.dukeengine.plugin.duke.DukeBlock
 import uz.dukeengine.plugin.duke.DukeField
 import uz.dukeengine.plugin.duke.DukeList
+import uz.dukeengine.plugin.duke.DukeRecords
 import uz.dukeengine.plugin.duke.DukeTypes
 
 /**
@@ -137,6 +138,9 @@ object DukeEdits {
             val close = closing(list) ?: return
             val indent = indentOf(document, close) + "  "
             document.insertString(document.getLineStartOffset(document.getLineNumber(close)), "$indent$word\n${indent}End\n")
+            // The one that was last is not any more, so its End needs the comma it could do without.
+            val last = list.blocks.lastOrNull()?.takeIf { it.isClosed && !it.hasComma }
+            last?.node?.findChildByType(DukeTypes.END)?.let { document.insertString(it.textRange.endOffset, ",") }
             return
         }
         if (field != null) {
@@ -164,32 +168,52 @@ object DukeEdits {
         if (from < 0 || to !in items.indices) return
         val first = linesOf(document, items[minOf(from, to)])
         val second = linesOf(document, items[maxOf(from, to)])
+        // The comma belongs to the place, not to the block: the one before takes it, and the last of the
+        // list is written without. Both texts move, so both are written the way their new place needs.
         val firstText = document.getText(first)
         val secondText = document.getText(second)
-        document.replaceString(second.startOffset, second.endOffset, firstText)
-        document.replaceString(first.startOffset, first.endOffset, secondText)
+        document.replaceString(second.startOffset, second.endOffset, comma(firstText, maxOf(from, to) != items.lastIndex))
+        document.replaceString(first.startOffset, first.endOffset, comma(secondText, true))
     }
 
-    /** `entry = value` in the map [key] of [owner], the map written out if it is not. */
+    /** A block's lines with the comma on its `End`, or without it; put before any comment on that line. */
+    private fun comma(text: String, on: Boolean): String {
+        val lines = text.split("\n").toMutableList()
+        val at = lines.indexOfLast { it.substringBefore(';').isNotBlank() }
+        if (at < 0) return text
+        val code = lines[at].substringBefore(';').trimEnd()
+        val has = code.endsWith(",")
+        if (has == on) return text
+        val cut = if (has) code.length - 1 else code.length
+        lines[at] = lines[at].substring(0, cut) + (if (on) "," else "") + lines[at].substring(code.length)
+        return lines.joinToString("\n")
+    }
+
+    /**
+     * A map is a list of its entries, `Armor = [FLAME = 0.5]`, so each of these is one item of that list
+     * written, rewritten or taken out — the list's own doing about lines, commas and comments included.
+     */
     fun setEntry(document: Document, owner: DukeBlock, key: String, order: List<String>, entry: String, value: String) {
-        val map = mapOf(owner, key) ?: return insertLines(document, owner, key, order, listOf(key, "  $entry = $value", "End"))
-        setValue(document, map, entry, emptyList(), value)
+        val at = entryAt(owner, key, entry)
+        if (at < 0) addItem(document, owner, key, order, "$entry = $value") else setItem(document, owner, key, at, "$entry = $value")
     }
 
     /** An entry out of its map; the last one out takes the map with it. */
-    fun removeEntry(document: Document, owner: DukeBlock, key: String, entry: String) {
-        val map = mapOf(owner, key) ?: return
-        val field = map.field(entry) ?: return
-        removeLines(document, if (map.fields.size == 1) map else field)
+    fun removeEntry(document: Document, owner: DukeBlock, key: String, order: List<String>, entry: String) {
+        val at = entryAt(owner, key, entry)
+        if (at >= 0) removeItem(document, owner, key, order, at)
     }
 
     /** An entry's key rewritten, its value kept. */
     fun renameEntry(document: Document, owner: DukeBlock, key: String, from: String, to: String) {
-        val range = mapOf(owner, key)?.field(from)?.keyElement?.textRange ?: return
-        document.replaceString(range.startOffset, range.endOffset, to)
+        val at = entryAt(owner, key, from)
+        val value = owner.field(key)?.values?.getOrNull(at)?.unquoted?.let { DukeRecords.entryOf(it)?.second } ?: return
+        setItem(document, owner, key, at, "$to = $value")
     }
 
-    fun mapOf(owner: DukeBlock, key: String): DukeBlock? = owner.blocks.firstOrNull { it.wordText.equals(key, ignoreCase = true) }
+    /** Where the entry [name] stands in the map [key] of [owner]; -1 when it is not written. */
+    private fun entryAt(owner: DukeBlock, key: String, name: String): Int =
+        owner.field(key)?.values.orEmpty().indexOfFirst { DukeRecords.entryOf(it.unquoted)?.first.equals(name, ignoreCase = true) }
 
     /** A value as a file keeps it: quoted where a `;` would start a comment, a quote end it, or a `[` open a list. */
     fun quoted(text: String): String {

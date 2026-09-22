@@ -4,6 +4,39 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-09-22
+
+### Changed
+
+- The two `.duke` format changes of engine 0.3.0, which the plugin read as errors until now.
+
+  A list of blocks separates its entries with a comma on the `End` — `Modules = [` `MoveUpdate` … `End,`
+  `PursueUpdate` … `End` `]` — required between them, allowed after the last. Every kit effect file is
+  written this way, and the plugin marked each `End,` as a line that fits nothing and then lost the list
+  that held it. A missing comma is now the complaint the engine makes instead of silence.
+
+  A map is a field like any other, written as a list of its entries: `Armor = [FLAME = 0.5]`, not a block
+  named after its component. Entries are checked as `Binder.entries` reads them — `key = value`, each key
+  and value by its own type, no key twice — completed from the enum or the blocks its keys link to, opened
+  by Ctrl+Click, and edited in the Inspector as items of that list.
+
+- The tests read no game but their own. The records they run against are still the engine's, off a checkout
+  on the disk, but the game those records are written into now lives in the plugin, under
+  `src/test/testData/game`: units, an animation set with the `.gltf` files its clips are read out of, a world,
+  a theme, a HUD with its skins, a map, and the assets they name. A syntax the engine grows is written there
+  and the checks are what prove the plugin reads it — no second checkout, and nothing tied to one game.
+
+### Fixed
+
+- A map's entries in the Inspector were drawn half-cut: a long key — `SUBDUAL_BUILDING` — wrapped its box
+  onto a second line, and the row, sized for one, clipped it. The map's name goes above its entries now and
+  each entry keeps to its line.
+- Adding or moving a block in a list left the one before it without the comma the engine needs, and
+  **File → New → Project → Duke Game** wrote a game the engine would refuse to load.
+- Collapsing a group in the Inspector threw `Read access is allowed from inside read-action only`. A row asks
+  the project what a path is against, and a listener of the panel's own reaches the EDT without a read action;
+  the ask takes one of its own now, which costs nothing where one is already held.
+
 ## 0.2.1 - 2026-09-22
 
 ### Fixed

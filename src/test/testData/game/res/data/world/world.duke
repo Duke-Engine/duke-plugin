@@ -1,0 +1,18 @@
+; What every floor is laid in. A map that says nothing about how tall a storey is takes it
+; from here — both records are `Layered`, and the world's is the one a map falls back to.
+
+World
+  Name = Fixture
+  LevelHeight = 10
+  Themes = [Forest]
+End
+
+; Where the sun stands over it. A block of its own, found by its shape rather than its name.
+Sun
+  Pitch = 40
+  Yaw = 219
+  StrengthPercent = 100
+  AmbientPercent = 55
+  Colour = 0xFFFAE6
+  AmbientTint = 0xE6F3FF
+End

@@ -111,6 +111,7 @@ class DukeLexer : LexerBase() {
                 '[' -> one(DukeTypes.BAD, IN_LIST)
                 else -> scalar(inList = true)
             }
+            role == AFTER_END && c == ',' -> one(DukeTypes.COMMA, AFTER_VALUE)
             else -> rest(DukeTypes.BAD)
         }
     }
@@ -125,6 +126,12 @@ class DukeLexer : LexerBase() {
                 role = AFTER_VALUE
                 val word = buffer.subSequence(tokenStart, wordEnd).toString()
                 return if (word.equals("End", ignoreCase = true)) DukeTypes.END else DukeTypes.WORD
+            }
+            // `End,`: the comma that holds one block of a list apart from the next, a token of its own.
+            if (isEndLine(tokenStart)) {
+                tokenEnd = wordEnd
+                role = AFTER_END
+                return DukeTypes.END
             }
             if (buffer[skip(wordEnd) { it != '\n' && isSpace(it) }] == '=') {
                 tokenEnd = wordEnd
@@ -183,7 +190,17 @@ class DukeLexer : LexerBase() {
         val first = nextCodeLine(bracket)
         if (first < 0 || !isLoneWord(first) || isEnd(first)) return false
         val second = nextCodeLine(first)
-        return second >= 0 && (indentOf(second) > indentOf(first) || (isLoneWord(second) && isEnd(second)))
+        return second >= 0 && (indentOf(second) > indentOf(first) || isEndLine(second))
+    }
+
+    /**
+     * Whether the line at [start] is an `End` and nothing else: `DukeText` reads one carrying the comma
+     * that separates the blocks of a list, `End,`, as the same End.
+     */
+    private fun isEndLine(start: Int): Boolean {
+        if (!isWordStart(buffer[start]) || !isEnd(start)) return false
+        val after = skip(start + 1, ::isWordPart)
+        return endsLine(after) || (after < bufferEnd && buffer[after] == ',' && endsLine(after + 1))
     }
 
     /** Where the code of the next line after [offset]'s starts, blank and comment-only lines passed over; -1 at the end. */
@@ -255,6 +272,7 @@ class DukeLexer : LexerBase() {
         private const val AFTER_EQ = 2
         private const val IN_LIST = 3
         private const val AFTER_VALUE = 4
+        private const val AFTER_END = 5
 
         private val NUMBER = Regex("[-+]?(\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?[fFdD]?|0[xX][0-9a-fA-F]+")
         private val WORD = Regex("[A-Za-z_][A-Za-z0-9_]*")

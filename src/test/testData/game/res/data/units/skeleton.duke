@@ -1,0 +1,46 @@
+; A skeleton. The plainest unit there is: a body, legs, a brain, and the clips of the set
+; it moves by. Every line here is one of Monster's components — see the record.
+
+Monster
+  Name = Skeleton
+  DisplayName = Skeleton
+  KindOf = [INFANTRY, SELECTABLE, CAN_ATTACK]
+
+  SenseRadius = 90
+  Geometry = Cylinder
+    Radius = 3
+    Height = 11
+  End
+  ; A map: a list of its entries, each read as the map's own types.
+  Armor = [NORMAL = 1.0, ARMOR_PIERCING = 2.0, FLAME = 1.5]
+
+  Modules = [
+    ActiveBody
+      MaxHealth = 120
+    End,
+    MoveUpdate
+      Speed = 18
+    End,
+    ; A module the game wrote, named by its own class.
+    Brain
+      GiveUpAfter = 6
+    End
+  ]
+
+  Tempo = 2
+  Flies = No
+
+  Model = models/monsters/skeleton.glb
+  Texture = models/monsters/skeleton.png
+  Tint = 0xC8D4E0
+  ModelScale = 1
+  Held = [
+    Held
+      Model = models/monsters/axe.gltf
+      Bone = handslot.r
+    End
+  ]
+
+  Animations = Humanoid
+  Attack = Melee_Attack
+End

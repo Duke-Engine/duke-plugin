@@ -38,11 +38,12 @@ jobs:
   # ---------------------------------------------------------------------------
   # The gate. Runs on everything, including pull requests.
   #
-  # The tests read two checkouts off the disk rather than fixtures written to
-  # agree with them: the engine, for the records a `.duke` block is bound to, and
-  # a game, for real data to run the checks over. `Repos` finds them by
-  # DUKE_ENGINE and DUKE_SAMPLE, so CI says where it put them and the same tests
-  # pass here and on a laptop.
+  # The tests read the engine off the disk rather than fixtures written to agree
+  # with it: it holds the records a `.duke` block is bound to, and the plugin
+  # mirrors its reader. The game those records are written into is the plugin's
+  # own, under src/test/testData/game — no second game checkout. `Repos` finds
+  # the engine by DUKE_ENGINE, so CI says where it put it and the same tests pass
+  # here and on a laptop.
   #
   # One runner, not three: the plugin is platform-independent and the IntelliJ
   # Platform is a slow download to repeat twice for nothing.
@@ -59,12 +60,6 @@ jobs:
           repository: Duke-Engine/duke-engine
           path: .repos/duke-engine
 
-      - name: Check out a game to read
-        uses: actions/checkout@v4
-        with:
-          repository: Duke-Engine/duke-dungeon
-          path: .repos/duke-dungeon
-
       # 21, not 25: the 2025.3 platform runs on 21, and building with a newer
       # JAVA_HOME emits classes it cannot load. build.gradle.kts pins the
       # toolchain to the same number.
@@ -80,7 +75,6 @@ jobs:
         run: ./gradlew build --no-daemon --stacktrace
         env:
           DUKE_ENGINE: ${{ github.workspace }}/.repos/duke-engine
-          DUKE_SAMPLE: ${{ github.workspace }}/.repos/duke-dungeon
 
       - name: Keep the reports when it fails
         if: failure()

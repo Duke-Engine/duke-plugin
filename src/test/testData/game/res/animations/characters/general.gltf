@@ -1,0 +1,14 @@
+{
+  "asset": { "version": "2.0", "generator": "written by hand, for the plugin's checks" },
+  "scenes": [{ "nodes": [] }],
+  "nodes": [],
+  "animations": [
+    { "name": "Idle_A", "channels": [], "samplers": [] },
+    { "name": "Walking_A", "channels": [], "samplers": [] },
+    { "name": "Running_A", "channels": [], "samplers": [] },
+    { "name": "Running_B", "channels": [], "samplers": [] },
+    { "name": "Hit_A", "channels": [], "samplers": [] },
+    { "name": "Death_A", "channels": [], "samplers": [] },
+    { "name": "Melee_Attack", "channels": [], "samplers": [] }
+  ]
+}

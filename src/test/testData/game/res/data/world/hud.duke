@@ -1,0 +1,24 @@
+; The hero's bar. Its layout is the client's own `PanelLook`; what a game writes is the
+; skins its edges are painted with and the words it says.
+
+Hud
+  Name = Fixture
+  SkillsWord = Skills
+  ItemsWord = Bag
+  DepthWord = Depth
+End
+
+Skin
+  Name = Minimap
+  Texture = ui/borders/default/border/panel-border-016.png
+  Inset = 16
+  Scale = 1.15
+  Tint = 0xC9A24B
+End
+
+Skin
+  Name = Hero
+  Texture = ui/borders/default/border/panel-border-004.png
+  Inset = 12
+  Tint = 0x6B5C46
+End
