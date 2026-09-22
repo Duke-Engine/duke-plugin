@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>uz.dukeengine.plugin</id>
     <name>Duke Engine</name>
-    <vendor url="https://duke-engine.uz">Sonic development team</vendor>
+    <vendor url="https://duke-engine.uz">Duke engine</vendor>
 
     <description><![CDATA[
         Editor support for the files that hold a Duke Engine game's content: its <code>.duke</code> data files — its world,
